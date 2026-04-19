@@ -1,0 +1,25 @@
+node_modules/
+.next/
+dist/
+out/
+cache/
+broadcast/
+*.db
+.env
+.env.local
+.DS_Store
+
+# Foundry
+contracts/lib/
+contracts/cache/
+contracts/out/
+
+# Editor
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
