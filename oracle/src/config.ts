@@ -1,0 +1,73 @@
+import 'dotenv/config';
+import type { Hex } from 'viem';
+
+export type Config = {
+  rpcUrl: string;
+  chain: 'sepolia' | 'mainnet';
+  oraclePrivateKey: Hex;
+  contractAddress: `0x${string}`;
+  openaiApiKey: string;
+  openaiModel: string;
+  dbPath: string;
+  pollIntervalMs: number;
+  startBlock: bigint;
+};
+
+function requireEnv(name: string): string {
+  const v = process.env[name];
+  if (v === undefined || v === '') {
+    throw new Error(
+      `Missing required env var: ${name}. See oracle/.env.example for the full list.`,
+    );
+  }
+  return v;
+}
+
+function parseHex(name: string, raw: string): Hex {
+  if (!/^0x[0-9a-fA-F]+$/.test(raw)) {
+    throw new Error(`Env var ${name} must be a 0x-prefixed hex string.`);
+  }
+  return raw as Hex;
+}
+
+function parseAddress(name: string, raw: string): `0x${string}` {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(raw)) {
+    throw new Error(`Env var ${name} must be a 0x-prefixed 20-byte address.`);
+  }
+  return raw as `0x${string}`;
+}
+
+function parseBigInt(name: string, raw: string): bigint {
+  try {
+    return BigInt(raw);
+  } catch {
+    throw new Error(`Env var ${name} must be an integer, got "${raw}".`);
+  }
+}
+
+function parseInteger(name: string, raw: string): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
+    throw new Error(`Env var ${name} must be a positive integer, got "${raw}".`);
+  }
+  return n;
+}
+
+export function loadConfig(): Config {
+  const chainRaw = (process.env.CHAIN ?? 'sepolia').toLowerCase();
+  if (chainRaw !== 'sepolia' && chainRaw !== 'mainnet') {
+    throw new Error(`CHAIN must be "sepolia" or "mainnet", got "${chainRaw}".`);
+  }
+
+  return {
+    rpcUrl: requireEnv('RPC_URL'),
+    chain: chainRaw,
+    oraclePrivateKey: parseHex('ORACLE_PRIVATE_KEY', requireEnv('ORACLE_PRIVATE_KEY')),
+    contractAddress: parseAddress('CONTRACT_ADDRESS', requireEnv('CONTRACT_ADDRESS')),
+    openaiApiKey: requireEnv('OPENAI_API_KEY'),
+    openaiModel: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
+    dbPath: process.env.DB_PATH ?? './oracle.db',
+    pollIntervalMs: parseInteger('POLL_INTERVAL_MS', process.env.POLL_INTERVAL_MS ?? '5000'),
+    startBlock: parseBigInt('START_BLOCK', requireEnv('START_BLOCK')),
+  };
+}

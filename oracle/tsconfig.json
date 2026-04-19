@@ -7,8 +7,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "declarationMap": true,
+    "resolveJsonModule": true,
+    "declaration": false,
     "sourceMap": true,
     "outDir": "dist",
     "rootDir": "src"
