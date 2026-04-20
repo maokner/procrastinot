@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "pnpm install --frozen-lockfile --ignore-scripts",
+  "buildCommand": "pnpm --filter @procrastinot/abi build && pnpm --filter web build",
+  "outputDirectory": "web/.next",
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- web packages/abi vercel.json package.json pnpm-lock.yaml"
+}

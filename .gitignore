@@ -8,22 +8,36 @@ broadcast/
 *.db
 *.db-shm
 *.db-wal
+
+# Env / secrets — belt-and-suspenders: never match anything with "env" and a secret
 .env
-.env.local
-.env.supabase
+.env.*
+!.env.example
+!.env.*.example
+
+# Keys (accidental commits)
+*.pem
+*.key
+*.p12
+*.keystore
+id_rsa*
+id_ed25519*
+
+# OS + editor
 .DS_Store
+.vscode/
+.idea/
+*.swp
 
 # Foundry
 contracts/lib/
 contracts/cache/
 contracts/out/
 
-# Editor
-.vscode/
-.idea/
-
-# Tooling auto-generated
+# Platform / tooling
+.vercel/
 .nexus/
+.turbo/
 
 # Logs
 *.log
