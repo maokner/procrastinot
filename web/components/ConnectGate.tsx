@@ -2,8 +2,8 @@
 
 import { ReactNode } from 'react';
 import { useAccount, useChainId, useSwitchChain } from 'wagmi';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { sepolia } from 'wagmi/chains';
+import { ConnectButton } from './ConnectButton';
 
 export function ConnectGate({ children }: { children: ReactNode }) {
   const { isConnected } = useAccount();

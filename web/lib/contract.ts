@@ -1,5 +1,4 @@
 import type { Abi } from 'viem';
-import { useReadContract } from 'wagmi';
 import { procrastinotAbi } from '@procrastinot/abi';
 
 // TODO(phase-b): drop `as Abi` cast once the ABI JSON is populated.
@@ -54,19 +53,3 @@ export const erc20Abi = [
     outputs: [{ name: '', type: 'uint8' }],
   },
 ] as const satisfies Abi;
-
-/**
- * Thin wrapper that fetches a single commitment via `getCommitment(id)`.
- * Disabled until the ABI stub is populated and the contract address is configured.
- */
-export function useCommitment(id: bigint | undefined) {
-  return useReadContract({
-    address: isContractConfigured() ? (CONTRACT_ADDRESS as `0x${string}`) : undefined,
-    abi,
-    functionName: 'getCommitment',
-    args: id !== undefined ? [id] : undefined,
-    query: {
-      enabled: id !== undefined && isContractConfigured(),
-    },
-  });
-}

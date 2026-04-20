@@ -2,24 +2,14 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   useAccount,
   useReadContract,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from 'wagmi';
-import {
-  createPublicClient,
-  decodeEventLog,
-  http,
-  isAddress,
-  parseAbiItem,
-  type Abi,
-  type Hex,
-} from 'viem';
-import { mainnet } from 'wagmi/chains';
+import { decodeEventLog, parseAbiItem, type Abi, type Hex } from 'viem';
 import {
   CONTRACT_ADDRESS,
   CHAIN_ID,
@@ -29,17 +19,19 @@ import {
   isContractConfigured,
 } from '@/lib/contract';
 import { parseUsdc, etherscanTxUrl } from '@/lib/format';
+import { supabaseBrowser } from '@/lib/supabase';
 import { ConnectGate } from '@/components/ConnectGate';
-
-const mainnetClient = createPublicClient({ chain: mainnet, transport: http() });
+import { ConnectButton } from '@/components/ConnectButton';
 
 type Step = 'idle' | 'approving' | 'creating' | 'done' | 'error';
+
+type Suggestion = { username: string; display_name: string | null };
 
 export default function CreatePage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col px-6 py-8">
       <header className="mb-8 flex items-center justify-between">
-        <Link href="/" className="font-mono text-sm uppercase tracking-widest">
+        <Link href="/" prefetch className="font-mono text-sm uppercase tracking-widest">
           procrastinot
         </Link>
         <ConnectButton />
@@ -59,7 +51,9 @@ function CreateForm() {
   const [rubric, setRubric] = useState('');
   const [enemyInput, setEnemyInput] = useState('');
   const [enemyResolved, setEnemyResolved] = useState<`0x${string}` | null>(null);
-  const [ensLoading, setEnsLoading] = useState(false);
+  const [resolveError, setResolveError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [showSug, setShowSug] = useState(false);
   const [stake, setStake] = useState('');
   const [oracleFee, setOracleFee] = useState('0.25');
   const [deadlineLocal, setDeadlineLocal] = useState('');
@@ -67,53 +61,87 @@ function CreateForm() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [approveHash, setApproveHash] = useState<Hex | null>(null);
   const [createHash, setCreateHash] = useState<Hex | null>(null);
+  const sugRef = useRef<HTMLDivElement>(null);
 
-  // Resolve ENS on mainnet if input looks like a name.
-  useEffect(() => {
-    const trimmed = enemyInput.trim();
-    if (!trimmed) {
-      setEnemyResolved(null);
-      return;
-    }
-    if (isAddress(trimmed)) {
-      setEnemyResolved(trimmed as `0x${string}`);
-      return;
-    }
-    if (/\.eth$/i.test(trimmed)) {
-      let cancelled = false;
-      setEnsLoading(true);
-      mainnetClient
-        .getEnsAddress({ name: trimmed })
-        .then((addr) => {
-          if (cancelled) return;
-          setEnemyResolved(addr ?? null);
-        })
-        .catch(() => {
-          if (!cancelled) setEnemyResolved(null);
-        })
-        .finally(() => {
-          if (!cancelled) setEnsLoading(false);
-        });
-      return () => {
-        cancelled = true;
-      };
-    }
-    setEnemyResolved(null);
+  const normalizedUsername = useMemo(() => {
+    const v = enemyInput.trim().replace(/^@/, '').toLowerCase();
+    return /^[a-z0-9_]{1,20}$/.test(v) ? v : '';
   }, [enemyInput]);
 
-  const stakeWei = useMemo(() => {
-    try {
-      return parseUsdc(stake);
-    } catch {
-      return 0n;
+  // Fetch username suggestions (prefix match) as user types.
+  useEffect(() => {
+    if (!normalizedUsername) {
+      setSuggestions([]);
+      return;
     }
+    let cancelled = false;
+    const handle = setTimeout(async () => {
+      try {
+        const r = await fetch(
+          `/api/users/search?q=${encodeURIComponent(normalizedUsername)}`,
+        );
+        if (!r.ok) return;
+        const list = (await r.json()) as Suggestion[];
+        if (!cancelled) setSuggestions(list);
+      } catch {
+        /* ignore */
+      }
+    }, 150);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [normalizedUsername]);
+
+  // Resolve the selected/typed username → wallet address via RPC.
+  useEffect(() => {
+    if (!normalizedUsername) {
+      setEnemyResolved(null);
+      setResolveError(null);
+      return;
+    }
+    let cancelled = false;
+    setResolveError(null);
+    setEnemyResolved(null);
+    (async () => {
+      const sb = supabaseBrowser();
+      const { data, error } = await sb.rpc('resolve_username', {
+        u: normalizedUsername,
+      } as never);
+      if (cancelled) return;
+      if (error) {
+        setResolveError(error.message);
+        return;
+      }
+      const row = (data as { address: string; chain_id: number }[] | null)?.[0];
+      if (!row) {
+        setResolveError(
+          "That user hasn't linked a wallet yet. Ask them to finish onboarding.",
+        );
+        return;
+      }
+      setEnemyResolved(row.address as `0x${string}`);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [normalizedUsername]);
+
+  // Close suggestions on outside click.
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (!sugRef.current) return;
+      if (!sugRef.current.contains(e.target as Node)) setShowSug(false);
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  const stakeWei = useMemo(() => {
+    try { return parseUsdc(stake); } catch { return 0n; }
   }, [stake]);
   const feeWei = useMemo(() => {
-    try {
-      return parseUsdc(oracleFee);
-    } catch {
-      return 0n;
-    }
+    try { return parseUsdc(oracleFee); } catch { return 0n; }
   }, [oracleFee]);
   const totalWei = stakeWei + feeWei;
 
@@ -121,9 +149,10 @@ function CreateForm() {
     address: USDC_ADDRESS,
     abi: erc20Abi,
     functionName: 'allowance',
-    args: address && isContractConfigured()
-      ? [address, CONTRACT_ADDRESS as `0x${string}`]
-      : undefined,
+    args:
+      address && isContractConfigured()
+        ? [address, CONTRACT_ADDRESS as `0x${string}`]
+        : undefined,
     query: { enabled: Boolean(address) && isContractConfigured() },
   });
 
@@ -138,7 +167,6 @@ function CreateForm() {
     query: { enabled: Boolean(createHash) },
   });
 
-  // After approve receipt confirms, kick off create.
   useEffect(() => {
     if (step !== 'approving') return;
     if (!approveReceipt.data) return;
@@ -147,7 +175,6 @@ function CreateForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [approveReceipt.data, step]);
 
-  // After create receipt confirms, decode event + push.
   useEffect(() => {
     if (step !== 'creating') return;
     if (!createReceipt.data) return;
@@ -169,17 +196,15 @@ function CreateForm() {
           return;
         }
       } catch {
-        // not our event
+        /* not our event */
       }
     }
-    // Couldn't find the event — still mark done but stay on page.
     setStep('done');
   }, [createReceipt.data, step, router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErrorMsg(null);
-
     if (!isContractConfigured()) {
       setErrorMsg('NEXT_PUBLIC_CONTRACT_ADDRESS is not configured.');
       return;
@@ -192,8 +217,8 @@ function CreateForm() {
       setErrorMsg('Task and rubric are required.');
       return;
     }
-    if (!enemyResolved || !isAddress(enemyResolved)) {
-      setErrorMsg('Enter a valid enemy address or ENS name.');
+    if (!enemyResolved) {
+      setErrorMsg('Pick a valid @username enemy.');
       return;
     }
     if (enemyResolved.toLowerCase() === address.toLowerCase()) {
@@ -248,7 +273,7 @@ function CreateForm() {
         address: CONTRACT_ADDRESS as `0x${string}`,
         abi: abi as Abi,
         functionName: 'create',
-        args: [enemyResolved, stakeWei, feeWei, deadlineSecs, task, rubric],
+        args: [enemyResolved!, stakeWei, feeWei, deadlineSecs, task, rubric],
       });
       setCreateHash(hash);
     } catch (err) {
@@ -283,21 +308,57 @@ function CreateForm() {
         />
       </label>
 
-      <label className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5" ref={sugRef}>
         <span className="text-sm text-neutral-300">
-          Enemy address <span className="text-red-400">(they get the money if you fail)</span>
+          Enemy <span className="text-red-400">(they get the money if you fail)</span>
         </span>
-        <input
-          value={enemyInput}
-          onChange={(e) => setEnemyInput(e.target.value)}
-          className="rounded border border-neutral-800 bg-neutral-950 p-3 font-mono text-neutral-100"
-          placeholder="0x… or name.eth"
-        />
-        {ensLoading && <span className="text-xs text-neutral-500">resolving…</span>}
-        {enemyResolved && enemyResolved !== enemyInput.trim() && (
-          <span className="font-mono text-xs text-neutral-500">→ {enemyResolved}</span>
+        <div className="relative">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500">
+            @
+          </span>
+          <input
+            value={enemyInput.replace(/^@/, '')}
+            onChange={(e) => {
+              setEnemyInput(e.target.value);
+              setShowSug(true);
+            }}
+            onFocus={() => setShowSug(true)}
+            autoComplete="off"
+            spellCheck={false}
+            className="w-full rounded border border-neutral-800 bg-neutral-950 p-3 pl-7 font-mono text-neutral-100"
+            placeholder="oliver"
+          />
+          {showSug && suggestions.length > 0 && (
+            <ul className="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-auto rounded border border-neutral-800 bg-neutral-950 py-1 text-sm shadow-lg">
+              {suggestions.map((s) => (
+                <li key={s.username}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEnemyInput(s.username);
+                      setShowSug(false);
+                    }}
+                    className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-neutral-900"
+                  >
+                    <span className="font-mono text-neutral-100">@{s.username}</span>
+                    {s.display_name && (
+                      <span className="text-xs text-neutral-500">{s.display_name}</span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        {enemyResolved && (
+          <span className="font-mono text-xs text-neutral-500">
+            @{normalizedUsername} → {enemyResolved.slice(0, 6)}…{enemyResolved.slice(-4)}
+          </span>
         )}
-      </label>
+        {resolveError && (
+          <span className="text-xs text-red-400">{resolveError}</span>
+        )}
+      </div>
 
       <div className="grid grid-cols-2 gap-4">
         <label className="flex flex-col gap-1.5">
@@ -349,7 +410,7 @@ function CreateForm() {
 
       <button
         type="submit"
-        disabled={busy || !isContractConfigured()}
+        disabled={busy || !isContractConfigured() || !enemyResolved}
         className="rounded bg-neutral-100 px-6 py-3 font-medium text-neutral-950 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
       >
         {busy ? 'Working…' : 'Commit'}

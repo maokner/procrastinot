@@ -13,6 +13,12 @@ const nextConfig: NextConfig = {
       ...(config.resolve.extensionAlias ?? {}),
       '.js': ['.ts', '.tsx', '.js', '.jsx'],
     };
+    // Silence the MetaMask SDK's optional React Native AsyncStorage import
+    // when bundling for the browser. It's a soft dep used only in RN.
+    config.resolve.fallback = {
+      ...(config.resolve.fallback ?? {}),
+      '@react-native-async-storage/async-storage': false,
+    };
     return config;
   },
 };

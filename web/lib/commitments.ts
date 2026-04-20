@@ -1,0 +1,102 @@
+import { cookies } from 'next/headers';
+import { supabaseServer } from './supabase.js';
+import type { Commitment, Profile, VerdictEvent } from './db-types.js';
+
+export type CommitmentWithProfiles = Commitment & {
+  creator?: Pick<Profile, 'username' | 'display_name' | 'avatar_url'> | null;
+  enemy?: Pick<Profile, 'username' | 'display_name' | 'avatar_url'> | null;
+};
+
+/**
+ * Get the currently signed-in Supabase user's profile id, if any.
+ * Returns null for anonymous visitors.
+ */
+export async function getViewerProfile(): Promise<Profile | null> {
+  const sb = supabaseServer(await cookies());
+  const { data: userResp } = await sb.auth.getUser();
+  if (!userResp?.user) return null;
+  const { data } = await sb
+    .from('profiles')
+    .select('*')
+    .eq('id', userResp.user.id)
+    .maybeSingle();
+  return (data as Profile | null) ?? null;
+}
+
+/** List commitments where the viewer is creator or enemy. */
+export async function listMyCommitments(profileId: string, limit = 50) {
+  const sb = supabaseServer(await cookies());
+  const { data, error } = await sb
+    .from('commitments')
+    .select('*')
+    .or(`creator_profile.eq.${profileId},enemy_profile.eq.${profileId}`)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as Commitment[];
+}
+
+/** List active commitments where the viewer is the enemy. */
+export async function listInboxActive(profileId: string) {
+  const sb = supabaseServer(await cookies());
+  const { data, error } = await sb
+    .from('commitments')
+    .select('*')
+    .eq('enemy_profile', profileId)
+    .eq('status', 'active')
+    .order('deadline', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as Commitment[];
+}
+
+/** History view for inbox: completed / forfeited commitments where viewer is enemy. */
+export async function listInboxHistory(profileId: string, limit = 50) {
+  const sb = supabaseServer(await cookies());
+  const { data, error } = await sb
+    .from('commitments')
+    .select('*')
+    .eq('enemy_profile', profileId)
+    .neq('status', 'active')
+    .order('updated_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as Commitment[];
+}
+
+/** Fetch one commitment by id. Returns null if not visible (RLS) or not yet indexed. */
+export async function getCommitment(id: string | number): Promise<Commitment | null> {
+  const sb = supabaseServer(await cookies());
+  const { data } = await sb
+    .from('commitments')
+    .select('*')
+    .eq('id', Number(id))
+    .maybeSingle();
+  return (data as Commitment | null) ?? null;
+}
+
+/** Fetch verdict events for a commitment in chronological order. */
+export async function listVerdictEvents(commitmentId: number): Promise<VerdictEvent[]> {
+  const sb = supabaseServer(await cookies());
+  const { data, error } = await sb
+    .from('verdict_events')
+    .select('*')
+    .eq('commitment_id', commitmentId)
+    .order('block_number', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as VerdictEvent[];
+}
+
+/** Batch-look-up profiles by id (for rendering usernames on list views). */
+export async function profilesByIds(ids: (string | null | undefined)[]) {
+  const unique = Array.from(new Set(ids.filter((x): x is string => Boolean(x))));
+  if (unique.length === 0) return new Map<string, Profile>();
+  const sb = supabaseServer(await cookies());
+  const { data, error } = await sb
+    .from('profiles')
+    .select('id, username, display_name, avatar_url, created_at')
+    .in('id', unique);
+  if (error) throw error;
+  const map = new Map<string, Profile>();
+  for (const p of (data ?? []) as Profile[]) map.set(p.id, p);
+  return map;
+}
