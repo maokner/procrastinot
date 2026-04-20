@@ -1,97 +1,109 @@
-# Procrastinot v2 — Usernames, Inbox, Indexer
+# Procrastinot v2 — parallelizable build plan
 
-This is the plan for the next iteration. v1 (the current deploy on Sepolia)
-works end-to-end but has three rough edges we want to fix:
+This supersedes the narrative plan that lived here previously. v2 fixes three
+v1 rough edges:
 
-1. **You have to know your enemy's wallet address.** You shouldn't — you
-   should just type `@oliver` and have the app resolve it.
-2. **The enemy doesn't know they're owed money** unless they're watching the
-   chain, and then they have to call `forfeit` themselves from an address
-   they know happens to be the enemy of some commitment. No discovery.
-3. **Every page reads the chain directly** (`getLogs`, `useReadContract` on a
-   public RPC). This is slow and gets slower with more commitments.
+1. You shouldn't need to know your enemy's wallet — `@oliver` should resolve.
+2. The enemy should be notified and have a one-click claim button, not watch
+   the chain for a commitment they never knew about.
+3. The web app reads the chain directly on every page load. Has to go.
 
-v2 fixes all three with a backend layer: **Supabase** for auth + DB, a new
-**indexer** service that mirrors chain events into Postgres, and a small
-**/inbox** UI for enemies. The smart contract does **not** change — funds
-custody stays fully on-chain and the semantics are identical.
+Plus one product tweak that v1 got slightly wrong: **the unspent oracle fee
+on forfeit should stay with the operator, not be forwarded to the enemy.**
+That's a smart-contract change — new v2 deploy, v1 stays live for history.
 
 ---
 
-## Guiding principles
+## Confirmed decisions (v1 → v2)
 
-- **Chain remains the source of truth for funds.** The backend never has
-  custody of USDC. If Supabase goes down, nothing is lost — the contract can
-  still be interacted with directly via Etherscan.
-- **Backend is a read cache + directory.** Postgres denormalizes chain events
-  for fast reads. The usernames table maps `@oliver → 0x…` (for outbound
-  addressing) and `0x… → @oliver` (for the inbox).
-- **Auth is proof-of-control, not just email.** Linking a wallet to a
-  `@username` requires a **SIWE** signature, so `@oliver` can only be claimed
-  by someone who actually controls the wallet.
-- **No API keys in the browser.** All writes go through server routes or
-  direct contract calls. `OPENAI_API_KEY`, service-role DB keys, and oracle
-  private keys only ever live on server hosts (Vercel env, Fly secrets).
-
----
-
-## Confirmed decisions
-
-- **Strict enemy matching.** You can only create a commitment against a
-  user who has already signed up AND verified a wallet. No invite flow in v2.
-- **One wallet per profile.** Simpler UX, simpler RLS. Can be relaxed later.
-- **Oracle and indexer split into two processes.** Cleaner ops (independent
-  crash/restart, different scaling needs) and avoids coupling the idempotency
-  DB of the oracle with the read-cache tables.
-- **Supabase built-in email** for auth + notifications. Upgrade to Resend
-  only if deliverability becomes a problem.
-- **Stay on Sepolia.** No mainnet concerns for v2.
+- **Strict matching.** Enemies must already be signed up and have a verified
+  wallet. No invite-pending flow in v2.
+- **One wallet per profile.** Simpler UX, simpler RLS.
+- **Oracle and indexer split into separate processes.** Independent crash /
+  restart behavior; different scaling needs.
+- **Supabase built-in SMTP** for auth emails + "you've been named" notifications.
+- **Stay on Sepolia.** No mainnet concerns.
+- **API keys never touch the browser.** Web only gets `NEXT_PUBLIC_*` + the
+  Supabase anon key. `OPENAI_API_KEY`, `ORACLE_PRIVATE_KEY`, and
+  `SUPABASE_SERVICE_ROLE_KEY` live only on server hosts (oracle, indexer,
+  web server routes).
+- **Fee semantics change on `forfeit`:** stake → enemy; unspent oracleFee →
+  operator. (Was: stake + unspent fee → enemy.) Contract redeploy required.
 
 ---
 
-## Proposed stack
+## Stack
 
-| Layer            | Tool                              | Notes                                              |
-|------------------|-----------------------------------|----------------------------------------------------|
-| Accounts + auth  | Supabase Auth (email/password)    | Email verification enabled; magic links optional. |
-| Database         | Supabase Postgres + RLS           | `profiles`, `wallets`, `commitments`, `verdict_events`. |
-| Realtime UI      | Supabase Realtime                 | Enemy's `/inbox` updates without refresh when a new commitment is indexed. |
-| Wallet linkage   | SIWE (Sign-In with Ethereum)      | `siwe` npm pkg, verified in a Next.js route handler. |
-| Indexer          | New `indexer/` workspace          | viem `watchContractEvent` → Supabase writes. Service-role client. |
-| Oracle           | Unchanged (existing `oracle/`)    | Still the signer for `submitVerdict`. Unaware of Supabase. |
-| Smart contract   | Unchanged                         | v1 deploy stays live.                              |
-| Web              | Existing `web/` + new server routes | Reads via Supabase JS client (RLS enforced).     |
-| Emails           | Supabase built-in SMTP            | New-commitment + deadline-passed notifications.    |
-| Hosting          | Vercel (web), Fly or Railway (oracle + indexer), Supabase cloud | Budget: $0–20/mo demo tier. |
+| Layer            | Tool                                | Notes                               |
+|------------------|-------------------------------------|-------------------------------------|
+| Accounts + auth  | Supabase Auth (email/password)      | Built-in SMTP for verification.     |
+| Database         | Supabase Postgres + RLS             | See schema below.                   |
+| Realtime UI      | Supabase Realtime                   | `/inbox` updates live.              |
+| Wallet linkage   | SIWE (`siwe` npm pkg)               | Verified in a Next route handler.   |
+| Indexer          | New `indexer/` workspace (viem + Supabase service client) | Watches chain events, writes to DB. |
+| Oracle           | Existing `oracle/`                  | Unchanged aside from new contract address. |
+| Smart contract   | v2 Procrastinot.sol                 | New deploy; v1 stays live for history. |
+| Web              | Existing `web/` + heavy rewrite     | React Server Components, lean connect button, Supabase reads. |
+| Emails           | Supabase built-in SMTP              | Auth flows + notification templates. |
+| Hosting (prod)   | Vercel (web) + Fly/Railway (oracle + indexer) + Supabase cloud | |
+
+---
+
+## Performance budget (the "much faster" requirement)
+
+v1 first-load JS was ~320 KB with three network round-trips before the UI
+became interactive (RPC for commitment read, RPC for logs, WalletConnect
+relay). v2 targets:
+
+| Metric                         | v1 baseline | v2 target |
+|--------------------------------|-------------|-----------|
+| `/` first-load JS              | ~320 KB     | ≤ 150 KB  |
+| `/my` time-to-data             | ~3–6 s      | ≤ 300 ms  |
+| `/c/[id]` time-to-data         | ~1–3 s      | ≤ 200 ms  |
+| `/inbox` live update lag       | n/a         | ≤ 1 s     |
+
+Levers:
+1. **Replace RainbowKit's 150 KB bundle** with a lean connect button using
+   wagmi connectors directly (`injected`, `walletConnect`, `coinbaseWallet`).
+   Lazy-load WalletConnect behind a click.
+2. **React Server Components for reads.** `/my`, `/c/[id]`, `/inbox` read
+   Supabase server-side, ship HTML only.
+3. **Kill all `useReadContract` polling** in read paths. Chain is slow; DB is fast.
+4. **Supabase Realtime** replaces "poll getCommitment every 5s".
+5. **Drop SSR of wallet providers** — render client-only behind a mount flag.
+6. **Next.js defaults**: prefetch-on-hover, font optimization, image optimization.
 
 ---
 
 ## Data model
 
 ```sql
--- Public profiles: one per Supabase auth user.
+-- Public profiles. One per Supabase auth user.
+create extension if not exists citext;
+create extension if not exists pgcrypto;
+
 create table profiles (
   id           uuid primary key references auth.users(id) on delete cascade,
   username     citext unique not null check (username ~ '^[a-z0-9_]{3,20}$'),
   display_name text,
   avatar_url   text,
-  created_at   timestamptz default now()
+  created_at   timestamptz not null default now()
 );
 
--- Exactly one verified wallet per profile (enforced via partial unique index).
+-- Exactly one verified wallet per profile.
 create table wallets (
   id          uuid primary key default gen_random_uuid(),
   profile_id  uuid not null references profiles(id) on delete cascade,
   address     citext not null,
   chain_id    int  not null default 11155111,
   verified_at timestamptz not null default now(),
-  unique (profile_id)                       -- one wallet per profile
+  unique (profile_id),
+  unique (address, chain_id)
 );
-create unique index wallets_address_chain_uniq on wallets(address, chain_id);
 
 -- Denormalized chain state. Indexer owns writes; UI reads.
 create table commitments (
-  id                bigint primary key,     -- matches on-chain id
+  id                bigint primary key,
   creator_profile   uuid references profiles(id),
   creator_address   citext not null,
   enemy_profile     uuid references profiles(id),
@@ -109,6 +121,9 @@ create table commitments (
   created_at        timestamptz not null,
   updated_at        timestamptz not null default now()
 );
+create index commitments_enemy_profile_idx on commitments(enemy_profile);
+create index commitments_creator_profile_idx on commitments(creator_profile);
+create index commitments_status_deadline_idx on commitments(status, deadline);
 
 -- One row per requestVerdict / submitVerdict / forfeit event.
 create table verdict_events (
@@ -123,106 +138,126 @@ create table verdict_events (
   block_number    bigint not null,
   created_at      timestamptz not null
 );
+create index verdict_events_commitment_idx on verdict_events(commitment_id);
+
+-- Username → address resolution (SECURITY DEFINER). Returns only what's needed.
+create function public.resolve_username(u citext)
+  returns table(address citext, chain_id int)
+  language sql stable security definer set search_path = public as $$
+  select w.address, w.chain_id
+  from wallets w
+  join profiles p on p.id = w.profile_id
+  where p.username = u
+  limit 1;
+$$;
 ```
 
-### Row-Level Security
+### RLS
 
-| Table            | Anon SELECT            | User SELECT                              | Writes                 |
-|------------------|------------------------|------------------------------------------|------------------------|
-| `profiles`       | `(username, display_name, avatar_url)` only | same                     | Owner only             |
-| `wallets`        | none                   | Own row only                             | Owner + SIWE-verified  |
-| `commitments`    | none                   | Rows where I'm creator_profile OR enemy_profile | Indexer (service role) |
-| `verdict_events` | none                   | Via join on visible commitments          | Indexer (service role) |
-
-Username → wallet resolution goes through a `public.resolve_username(username)`
-SQL function (SECURITY DEFINER) that returns only the verified address — never
-the `wallets.id` or timestamps.
+| Table            | Anon SELECT  | User SELECT                                       | Writes                |
+|------------------|--------------|---------------------------------------------------|-----------------------|
+| `profiles`       | `(username, display_name, avatar_url)` only | same                | Owner only            |
+| `wallets`        | none         | Own row only                                      | Owner + SIWE-verified |
+| `commitments`    | none         | Rows where I'm creator_profile OR enemy_profile   | Indexer (service role) |
+| `verdict_events` | none         | Via join on visible commitments                   | Indexer (service role) |
 
 ---
 
-## Three new flows
+## Parallel dispatch
 
-### 1. Onboarding
-1. `POST /auth/sign-up` (Supabase) with email + password.
-2. Email verification lands user on `/onboarding`.
-3. User picks a `@username` (regex enforced, uniqueness enforced by DB).
-4. **Link wallet**:
-   - Click Connect → wallet opens.
-   - Client requests a nonce from `/api/siwe/nonce`.
-   - Wallet signs a SIWE message containing the nonce.
-   - Client posts `{message, signature}` to `/api/siwe/verify`.
-   - Server verifies, inserts into `wallets`.
+Four streams. **Phase 0** scaffolding (orchestrator writes) produces the
+interface contract every agent depends on. Then A/B/C/D run concurrently.
 
-### 2. Create a commitment
-1. `/create` has an enemy field with `@username` autocomplete.
-2. Autocomplete queries `/api/users/search?q=oli` (rate-limited).
-3. On select, UI shows `@oliver (0xC2…71dD)` and disables free text.
-4. Submit → approve USDC → create (same two-tx flow as v1).
-5. Indexer picks up the `CommitmentCreated` event → writes a row → Oliver's
-   realtime channel receives it → Oliver's `/inbox` updates instantly.
-6. Supabase email fires to Oliver: "You've been named in a commitment."
+### Phase 0 — orchestrator (before agent dispatch)
 
-### 3. Enemy claim (the whole point)
-1. Oliver logs in, lands on `/inbox`.
-2. Sees a list of commitments where he's the enemy, with countdowns.
-3. Deadline passes → row flips from "waiting" to a green **Claim 1.25 USDC** button.
-4. Click → wallet signs `forfeit(id)` → tx sends → funds land in Oliver's wallet.
-5. Indexer picks up the `Forfeited` event → status flips to `forfeited` →
-   the row disappears from the Active tab and shows in History.
+- `supabase/migrations/0001_init.sql` — schema + RLS + `resolve_username`
+- `web/lib/supabase.ts` — `supabaseBrowser()`, `supabaseServer()` (cookie-based RLS session), `supabaseService()` (service role, server-only)
+- `web/lib/db-types.ts` — generated TS types matching the schema (manual for now; `supabase gen types` later)
+- `web/app/providers.tsx` — wagmi + react-query + Supabase session provider
+- `.env.example` updates in `oracle/`, `web/`, new `indexer/.env.example`
+- `indexer/` empty workspace shell (`package.json`, `tsconfig.json`, `src/index.ts` stub)
+- Update root `package.json` scripts (`dev:indexer`, `db:migrate`)
+- Update `pnpm-workspace.yaml` to include `indexer`
 
-If Oliver never claims, v1 semantics still hold: anyone can forfeit. We can
-optionally add a **keeper** (bot that auto-forfeits past-deadline commitments
-where the enemy has been inactive for >24h) — nice-to-have, not in v2 MVP.
+### Stream A — Contracts v2 (running now)
 
----
+**Owns:** `contracts/`, `packages/abi/src/addresses.ts`, oracle+web env updates for the new address, README status line.
 
-## Key security invariants
+**Delivers:** contract change + updated tests, v2 deploy on Sepolia, refreshed ABI + address exports, live envs pointing at v2.
 
-- **No private key leaves the server.** `ORACLE_PRIVATE_KEY` lives only on
-  the oracle host. `SUPABASE_SERVICE_ROLE_KEY` lives only on the indexer and
-  web server. `OPENAI_API_KEY` lives only on the oracle.
-- **Web app only sees `NEXT_PUBLIC_*` values + the Supabase anon key.** The
-  anon key is safe to expose because every table has RLS.
-- **SIWE message includes a server-issued nonce bound to the user's Supabase
-  session.** Stops replay + cross-account substitution.
-- **Indexer is a read-follower.** It never signs a chain tx. If compromised,
-  an attacker can write garbage into Postgres but cannot move funds.
+**Blocks:** nothing (fully parallelizable with B/C/D). Stream D prefers the new address before final integration but can develop against v1 in the interim.
 
----
+### Stream B — Indexer
 
-## Milestones
+**Owns:** `indexer/` (entire workspace), `supabase/migrations/0002_*.sql` if needed for indexer-specific bookkeeping (cursor table).
 
-| #  | Deliverable                                                           | Effort |
-|----|-----------------------------------------------------------------------|--------|
-| 1  | Supabase project + schema migration (`supabase/migrations/0001_*.sql`) + RLS policies + seed script | 0.5d |
-| 2  | `indexer/` workspace: viem watchContractEvent + Supabase service client; backfill from deploy block; docker | 0.5d |
-| 3  | Auth: email sign-up, email verification, `@username` picker page | 0.5d |
-| 4  | SIWE wallet linking (Next route handlers + client flow) | 0.5d |
-| 5  | Rewrite `/my` + `/c/[id]` to read from Supabase (kills `getLogs` latency) | 0.5d |
-| 6  | Username autocomplete in `/create` + address resolution | 0.25d |
-| 7  | `/inbox` page: realtime list, countdowns, Claim button | 0.5d |
-| 8  | Supabase email notifications on `CommitmentCreated` + near-deadline + Forfeited | 0.25d |
-| 9  | Ops: Vercel + Fly deploy configs, secrets setup, one-page ops runbook | 0.25d |
+**Delivers:**
+- `indexer/src/index.ts` — entrypoint, config load, Supabase service client init, start poller.
+- `indexer/src/poller.ts` — viem `watchContractEvent` for `CommitmentCreated`, `VerdictRequested`, `VerdictSubmitted`, `Completed`, `Forfeited`. Backfill from deploy block using `getLogs` in chunks of 5k blocks. Persists cursor in DB.
+- `indexer/src/enrichment.ts` — given `creator_address` / `enemy_address`, look up `profile_id` via `wallets` table; leave null if unknown.
+- `indexer/src/db.ts` — prepared statements for upserts.
+- `indexer/Dockerfile`
+- `indexer/README.md`
 
-**Total ~3.5 days.** Milestones 1 & 2 unblock almost everything; can be done
-first in parallel.
+**Depends on:** Supabase project created + migration applied + service role key.
 
----
+### Stream C — Auth, SIWE, Onboarding
 
-## Things we're explicitly not doing in v2
+**Owns** (files Agent C creates/edits):
+- `web/app/signup/page.tsx`
+- `web/app/login/page.tsx`
+- `web/app/onboarding/page.tsx` (pick @username, then link wallet)
+- `web/app/settings/page.tsx`
+- `web/app/profile/[username]/page.tsx` (public profile, minimal)
+- `web/app/api/siwe/nonce/route.ts`
+- `web/app/api/siwe/verify/route.ts`
+- `web/app/api/auth/signout/route.ts`
+- `web/components/auth/*`
+- `web/components/UserMenu.tsx` (avatar dropdown, signout)
+- `web/middleware.ts` (gate `/my`, `/inbox`, `/create` behind auth)
 
-- Multi-chain support. Sepolia only.
-- Mainnet USDC. Still the Circle Sepolia faucet.
-- Multisig / committee oracle. Single signer stays.
-- Custody-based accounts (where the backend holds funds). We never want this.
-- Mobile apps. Responsive web only.
-- Keeper bot for auto-forfeit. Will revisit if manual claim proves annoying.
-- Social graph / public profiles / leaderboards. Just the minimum for the core loop.
+**Depends on:** Phase 0 shared libs, Supabase keys.
+
+### Stream D — Commitment UI + perf rewrite
+
+**Owns** (files Agent D creates/edits):
+- `web/app/page.tsx` (landing; update copy)
+- `web/app/create/page.tsx` (with @username autocomplete)
+- `web/app/my/page.tsx` (Server Component, Supabase read, fast)
+- `web/app/c/[id]/page.tsx` (Server Component for initial paint, Client Component for live status)
+- `web/app/inbox/page.tsx` (NEW — enemy view, realtime)
+- `web/app/api/users/search/route.ts`
+- `web/components/commitment/*`
+- `web/components/ConnectButton.tsx` (NEW — lean, replaces RainbowKit)
+- Remove direct RainbowKit imports from the app (keep as dependency only if used transitively).
+- `web/lib/commitments.ts` (server-side read helpers)
+
+**Depends on:** Phase 0 shared libs, Supabase keys, eventually Stream A's new contract address.
 
 ---
 
-## Immediate next step
+## Security invariants (same as v1, spelled out)
 
-Before writing code: create the Supabase project, get the **project ref**,
-**anon key**, and **service-role key**, and drop them into `.env.example`
-files as commented templates. Then Milestone 1 can start.
+- `SUPABASE_SERVICE_ROLE_KEY` lives only on: indexer host, Next.js server routes that need admin writes. Never in `NEXT_PUBLIC_*`.
+- `OPENAI_API_KEY` lives only on the oracle.
+- `ORACLE_PRIVATE_KEY` lives only on the oracle.
+- The web app only ever receives: `NEXT_PUBLIC_CONTRACT_ADDRESS`, `NEXT_PUBLIC_USDC_ADDRESS`, `NEXT_PUBLIC_CHAIN_ID`, `NEXT_PUBLIC_RPC_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_WALLETCONNECT_ID`.
+- SIWE message carries a server-issued nonce bound to the Supabase session; nonce is single-use.
+- The indexer is a strict read-follower. If compromised, an attacker can corrupt Postgres (restoreable from Supabase backups) but cannot move USDC.
+
+---
+
+## Done criteria for v2
+
+- New contract deployed on Sepolia, verified, `PROCRASTINOT_SEPOLIA_V1`
+  preserved in `addresses.ts`.
+- `forge test -vvv` green including a new test covering the fee split.
+- Supabase project live, migrations applied, RLS enforced.
+- Indexer is backfilled from deploy block and continues following head.
+- Two users (creator + enemy) can each sign up, pick a username, link a
+  wallet via SIWE, and see each other by `@username`.
+- Creator picks enemy via autocomplete; commitment creates with the
+  resolved address; enemy sees it in `/inbox` via realtime within ~1s.
+- Past deadline, enemy clicks Claim and receives exactly `stake` USDC
+  (no oracle fee forwarded).
+- Lighthouse performance score ≥ 90 on `/my` and `/inbox` on a cold load.

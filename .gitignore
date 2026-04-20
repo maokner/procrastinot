@@ -10,6 +10,7 @@ broadcast/
 *.db-wal
 .env
 .env.local
+.env.supabase
 .DS_Store
 
 # Foundry
@@ -20,6 +21,9 @@ contracts/out/
 # Editor
 .vscode/
 .idea/
+
+# Tooling auto-generated
+.nexus/
 
 # Logs
 *.log

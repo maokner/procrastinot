@@ -1,4 +1,5 @@
 packages:
+  - "indexer"
   - "oracle"
   - "web"
   - "packages/*"

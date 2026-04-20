@@ -250,7 +250,7 @@ contract ProcrastinotTest is Test {
         p.forfeit(id);
     }
 
-    function testForfeitAfterDeadlineSendsAllToEnemy() public {
+    function testForfeitAfterDeadlineSplitsStakeAndFee() public {
         uint256 id = _createDefault();
 
         // burn one attempt first -> unspent oracleFee is FEE - perAttempt
@@ -258,22 +258,49 @@ contract ProcrastinotTest is Test {
         p.requestVerdict(id, "ipfs://e");
 
         Procrastinot.Commitment memory cBefore = p.getCommitment(id);
-        uint128 expected = cBefore.stake + cBefore.oracleFee;
+        uint128 expectedStake = cBefore.stake;
+        uint128 expectedRemainingFee = cBefore.oracleFee;
         uint256 enemyBefore = usdc.balanceOf(enemy);
+        uint256 opBefore = usdc.balanceOf(operator);
 
         vm.warp(deadline);
 
+        // Forfeited event payload is stake-only (what the enemy receives).
         vm.expectEmit(true, true, false, true, address(p));
-        emit Forfeited(id, enemy, expected);
+        emit Forfeited(id, enemy, expectedStake);
 
         p.forfeit(id);
 
-        assertEq(usdc.balanceOf(enemy), enemyBefore + expected);
+        assertEq(usdc.balanceOf(enemy), enemyBefore + expectedStake);
+        assertEq(usdc.balanceOf(operator), opBefore + expectedRemainingFee);
 
         Procrastinot.Commitment memory c = p.getCommitment(id);
         assertEq(uint8(c.status), uint8(Procrastinot.Status.Forfeited));
         assertEq(c.stake, 0);
         assertEq(c.oracleFee, 0);
+    }
+
+    function testForfeitAfterRequestVerdictSplitsRemainderToOperator() public {
+        uint256 id = _createDefault();
+
+        uint256 enemyBefore = usdc.balanceOf(enemy);
+        uint256 opBefore = usdc.balanceOf(operator);
+
+        // One requestVerdict burns exactly 1/3 of the initial oracle fee to operator.
+        vm.prank(user);
+        p.requestVerdict(id, "ipfs://e");
+
+        uint128 perAttempt = FEE / 3;
+
+        vm.warp(deadline + 1);
+        p.forfeit(id);
+
+        // Enemy got stake only.
+        assertEq(usdc.balanceOf(enemy), enemyBefore + STAKE);
+        // Operator got 1/3 from requestVerdict + remaining 2/3 from forfeit = full initial fee.
+        assertEq(usdc.balanceOf(operator), opBefore + FEE);
+        // Sanity: perAttempt + (FEE - perAttempt) == FEE
+        assertEq(perAttempt + (FEE - perAttempt), FEE);
     }
 
     function testForfeitIsPermissionless() public {

@@ -187,25 +187,30 @@ contract Procrastinot is ReentrancyGuard, Ownable {
         }
     }
 
-    /// @notice Permissionless forfeit after the deadline. Sends all remaining
-    ///         funds on the commitment (stake + unspent oracleFee) to the enemy.
+    /// @notice Permissionless forfeit after the deadline. Sends the stake to
+    ///         the enemy; any unspent oracleFee goes to the operator wallet
+    ///         (the oracle budget is never meant to reward the enemy).
     function forfeit(uint256 id) external nonReentrant {
         Commitment storage c = _commitments[id];
         if (c.status != Status.Active) revert NotActive();
         if (block.timestamp < c.deadline) revert DeadlineNotReached();
 
-        uint128 amount = c.stake + c.oracleFee;
+        uint128 stakeAmount = c.stake;
+        uint128 remainingFee = c.oracleFee;
         address enemy = c.enemy;
 
         c.stake = 0;
         c.oracleFee = 0;
         c.status = Status.Forfeited;
 
-        if (amount > 0) {
-            usdc.safeTransfer(enemy, amount);
+        if (remainingFee > 0) {
+            usdc.safeTransfer(operatorWallet, remainingFee);
+        }
+        if (stakeAmount > 0) {
+            usdc.safeTransfer(enemy, stakeAmount);
         }
 
-        emit Forfeited(id, enemy, amount);
+        emit Forfeited(id, enemy, stakeAmount);
     }
 
     // ---------------------------------------------------------------------

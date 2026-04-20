@@ -11,11 +11,17 @@ Procrastinot is a trust-minimized, irreversible accountability tool. The whole
 product is "I cannot un-commit, even with help" — the contract has no admin
 escape hatch for active commitments, and the forfeit path is permissionless.
 
-> **Status:** v1 works end-to-end on **Ethereum Sepolia**. Contract is
+> **Status:** v2 works end-to-end on **Ethereum Sepolia**. Contract is
 > deployed + verified at
-> [`0xaE8303EC8465A888E19d4A50f91053831e2269a2`](https://sepolia.etherscan.io/address/0xae8303ec8465a888e19d4a50f91053831e2269a2).
-> See [`plan.md`](./plan.md) for the v2 plan: usernames, inbox for enemies,
-> zero-knowledge-of-counterparty-wallets, and a proper indexer.
+> [`0x25DF2268051203cf73beb8cD9Cd55c313370FB26`](https://sepolia.etherscan.io/address/0x25df2268051203cf73beb8cd9cd55c313370fb26).
+>
+> | Version | Address | Forfeit split | Notes |
+> |---------|---------|---------------|-------|
+> | v2 (current) | [`0x25DF…FB26`](https://sepolia.etherscan.io/address/0x25df2268051203cf73beb8cd9cd55c313370fb26) | stake → enemy, unspent fee → operator | canonical |
+> | v1 | [`0xaE83…69a2`](https://sepolia.etherscan.io/address/0xae8303ec8465a888e19d4a50f91053831e2269a2) | stake + unspent fee → enemy | deprecated, use v2 |
+>
+> See [`plan.md`](./plan.md) for the next-iteration plan: usernames, inbox for
+> enemies, zero-knowledge-of-counterparty-wallets, and a proper indexer.
 
 ---
 
@@ -40,7 +46,8 @@ user            contract             oracle            OpenAI         enemy
  │◀─ stake refund ──│                                     │              │
  │                  │ ... or ... past deadline:           │              │
  │                  │◀── forfeit(id) ─── anyone ─────────▶│              │
- │                  │── stake + fee remainder ───────────────────────────▶│
+ │                  │── stake ───────────────────────────────────────────▶│
+ │                  │── unspent fee ─▶ operator           │              │
 ```
 
 Three possible terminal states:
@@ -48,7 +55,7 @@ Three possible terminal states:
 | State       | Cause                                       | Funds go to                         |
 |-------------|---------------------------------------------|-------------------------------------|
 | `Completed` | Oracle submitted `passed=true` pre-deadline | User gets stake; operator gets fee  |
-| `Forfeited` | Anyone called `forfeit` post-deadline       | Enemy gets stake + unspent fee      |
+| `Forfeited` | Anyone called `forfeit` post-deadline       | Enemy gets stake; operator gets unspent fee |
 | `Active`    | Default until resolved                      | Contract escrow                     |
 
 Up to **3 oracle attempts per commitment**; each attempt deducts
@@ -210,7 +217,7 @@ A suggested starting config:
 ## Running the tests
 
 ```bash
-# Smart contract: 18 tests, covering happy paths, edge cases, reentrancy, and
+# Smart contract: 19 tests, covering happy paths, edge cases, reentrancy, and
 # the global accounting invariant.
 pnpm test:contracts
 
@@ -224,6 +231,7 @@ CI (see `.github/workflows/ci.yml`) runs both on every push.
 
 ## Links
 
-- **Deployed contract (Sepolia):** <https://sepolia.etherscan.io/address/0xae8303ec8465a888e19d4a50f91053831e2269a2>
+- **Deployed contract (Sepolia, v2):** <https://sepolia.etherscan.io/address/0x25df2268051203cf73beb8cd9cd55c313370fb26>
+- **Previous deployment (Sepolia, v1 — deprecated):** <https://sepolia.etherscan.io/address/0xae8303ec8465a888e19d4a50f91053831e2269a2>
 - **Next-iteration plan:** [`plan.md`](./plan.md)
 - **Internal design docs:** `~/.claude/plans/procrastinot/` (not checked in; spec for how v1 was built)
