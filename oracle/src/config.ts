@@ -8,7 +8,8 @@ export type Config = {
   contractAddress: `0x${string}`;
   openaiApiKey: string;
   openaiModel: string;
-  dbPath: string;
+  supabaseUrl: string;
+  supabaseServiceRoleKey: string;
   pollIntervalMs: number;
   startBlock: bigint;
 };
@@ -66,7 +67,8 @@ export function loadConfig(): Config {
     contractAddress: parseAddress('CONTRACT_ADDRESS', requireEnv('CONTRACT_ADDRESS')),
     openaiApiKey: requireEnv('OPENAI_API_KEY'),
     openaiModel: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
-    dbPath: process.env.DB_PATH ?? './oracle.db',
+    supabaseUrl: requireEnv('SUPABASE_URL'),
+    supabaseServiceRoleKey: requireEnv('SUPABASE_SERVICE_ROLE_KEY'),
     pollIntervalMs: parseInteger('POLL_INTERVAL_MS', process.env.POLL_INTERVAL_MS ?? '5000'),
     startBlock: parseBigInt('START_BLOCK', requireEnv('START_BLOCK')),
   };

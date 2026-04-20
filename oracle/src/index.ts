@@ -15,7 +15,10 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const db = openDb(config.dbPath);
+  const db = openDb({
+    supabaseUrl: config.supabaseUrl,
+    supabaseServiceRoleKey: config.supabaseServiceRoleKey,
+  });
   const clients = createChainClients(config);
   const judge = createJudge({ apiKey: config.openaiApiKey, model: config.openaiModel });
   const poller = createPoller({ config, db, clients, judge });

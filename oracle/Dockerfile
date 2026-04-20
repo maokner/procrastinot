@@ -3,9 +3,7 @@
 # ---------- build stage ----------
 FROM node:20-alpine AS build
 
-# better-sqlite3 is a native module — needs build toolchain.
-RUN apk add --no-cache python3 make g++ \
-  && corepack enable \
+RUN corepack enable \
   && corepack prepare pnpm@9.12.0 --activate
 
 WORKDIR /repo

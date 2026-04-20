@@ -1,5 +1,4 @@
-import Database from 'better-sqlite3';
-import type { Database as DatabaseType, Statement } from 'better-sqlite3';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 export type VerdictStatus = 'pending' | 'submitted' | 'failed';
 
@@ -13,129 +12,155 @@ export type VerdictRow = {
   commitment_id: string;
   attempt_number: number;
   status: VerdictStatus;
-  passed: number | null;
+  passed: boolean | null;
   reason: string | null;
   tx_hash: string | null;
   evidence_uri: string | null;
 };
 
 export type OracleDb = {
-  raw: DatabaseType;
-  getCursor: () => bigint | null;
-  setCursor: (block: bigint) => void;
-  upsertTask: (row: TaskRow) => void;
-  getTask: (commitmentId: string) => TaskRow | undefined;
+  client: SupabaseClient;
+  getCursor: () => Promise<bigint | null>;
+  setCursor: (block: bigint) => Promise<void>;
+  upsertTask: (row: TaskRow) => Promise<void>;
+  getTask: (commitmentId: string) => Promise<TaskRow | undefined>;
   insertVerdict: (row: {
     commitment_id: string;
     attempt_number: number;
     evidence_uri: string;
-  }) => { inserted: boolean };
+  }) => Promise<{ inserted: boolean }>;
   markVerdictSubmitted: (args: {
     commitment_id: string;
     attempt_number: number;
     passed: boolean;
     reason: string;
     tx_hash: string | null;
-  }) => void;
+  }) => Promise<void>;
   markVerdictFailed: (args: {
     commitment_id: string;
     attempt_number: number;
     reason: string;
-  }) => void;
-  getPendingVerdicts: () => VerdictRow[];
+  }) => Promise<void>;
+  getPendingVerdicts: () => Promise<VerdictRow[]>;
   close: () => void;
 };
 
 const CURSOR_KEY = 'last_block';
 
-export function openDb(dbPath: string): OracleDb {
-  const raw = new Database(dbPath);
-  raw.pragma('journal_mode = WAL');
-  raw.pragma('foreign_keys = ON');
-
-  raw.exec(`
-    CREATE TABLE IF NOT EXISTS cursor (
-      key   TEXT PRIMARY KEY,
-      value INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS tasks (
-      commitment_id TEXT PRIMARY KEY,
-      task          TEXT NOT NULL,
-      rubric        TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS verdicts (
-      commitment_id  TEXT NOT NULL,
-      attempt_number INTEGER NOT NULL,
-      status         TEXT NOT NULL,
-      passed         INTEGER,
-      reason         TEXT,
-      tx_hash        TEXT,
-      evidence_uri   TEXT,
-      PRIMARY KEY (commitment_id, attempt_number)
-    );
-  `);
-
-  const stmts = {
-    getCursor: raw.prepare<[string]>('SELECT value FROM cursor WHERE key = ?'),
-    setCursor: raw.prepare<[string, string]>(
-      'INSERT INTO cursor(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
-    ),
-    upsertTask: raw.prepare<[string, string, string]>(
-      `INSERT INTO tasks(commitment_id, task, rubric) VALUES(?, ?, ?)
-       ON CONFLICT(commitment_id) DO UPDATE SET task = excluded.task, rubric = excluded.rubric`,
-    ),
-    getTask: raw.prepare<[string]>('SELECT commitment_id, task, rubric FROM tasks WHERE commitment_id = ?'),
-    insertVerdict: raw.prepare<[string, number, string]>(
-      `INSERT OR IGNORE INTO verdicts(commitment_id, attempt_number, status, evidence_uri)
-       VALUES(?, ?, 'pending', ?)`,
-    ),
-    markSubmitted: raw.prepare<[number, string, string | null, string, number]>(
-      `UPDATE verdicts SET status = 'submitted', passed = ?, reason = ?, tx_hash = ?
-       WHERE commitment_id = ? AND attempt_number = ?`,
-    ),
-    markFailed: raw.prepare<[string, string, number]>(
-      `UPDATE verdicts SET status = 'failed', reason = ?
-       WHERE commitment_id = ? AND attempt_number = ?`,
-    ),
-    getPending: raw.prepare<[]>(
-      `SELECT commitment_id, attempt_number, status, passed, reason, tx_hash, evidence_uri
-       FROM verdicts WHERE status = 'pending' ORDER BY commitment_id, attempt_number`,
-    ),
-  } satisfies Record<string, Statement>;
+export function openDb(args: {
+  supabaseUrl: string;
+  supabaseServiceRoleKey: string;
+}): OracleDb {
+  const client = createClient(args.supabaseUrl, args.supabaseServiceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { 'X-Client-Info': 'procrastinot-oracle' } },
+  });
 
   return {
-    raw,
-    getCursor(): bigint | null {
-      const row = stmts.getCursor.get(CURSOR_KEY) as { value: number | bigint } | undefined;
-      if (!row) return null;
-      return BigInt(row.value);
+    client,
+
+    async getCursor(): Promise<bigint | null> {
+      const { data, error } = await client
+        .from('oracle_cursor')
+        .select('value')
+        .eq('key', CURSOR_KEY)
+        .maybeSingle();
+      if (error) throw new Error(`getCursor: ${error.message}`);
+      if (!data) return null;
+      return BigInt(data.value);
     },
-    setCursor(block: bigint) {
-      stmts.setCursor.run(CURSOR_KEY, block.toString());
+
+    async setCursor(block: bigint): Promise<void> {
+      const { error } = await client
+        .from('oracle_cursor')
+        .upsert(
+          { key: CURSOR_KEY, value: Number(block), updated_at: new Date().toISOString() },
+          { onConflict: 'key' },
+        );
+      if (error) throw new Error(`setCursor: ${error.message}`);
     },
-    upsertTask(row: TaskRow) {
-      stmts.upsertTask.run(row.commitment_id, row.task, row.rubric);
+
+    async upsertTask(row: TaskRow): Promise<void> {
+      const { error } = await client
+        .from('oracle_tasks')
+        .upsert(
+          { commitment_id: row.commitment_id, task: row.task, rubric: row.rubric },
+          { onConflict: 'commitment_id' },
+        );
+      if (error) throw new Error(`upsertTask: ${error.message}`);
     },
-    getTask(commitmentId: string) {
-      return stmts.getTask.get(commitmentId) as TaskRow | undefined;
+
+    async getTask(commitmentId: string): Promise<TaskRow | undefined> {
+      const { data, error } = await client
+        .from('oracle_tasks')
+        .select('commitment_id, task, rubric')
+        .eq('commitment_id', commitmentId)
+        .maybeSingle();
+      if (error) throw new Error(`getTask: ${error.message}`);
+      if (!data) return undefined;
+      return data as TaskRow;
     },
-    insertVerdict({ commitment_id, attempt_number, evidence_uri }) {
-      const res = stmts.insertVerdict.run(commitment_id, attempt_number, evidence_uri);
-      return { inserted: res.changes > 0 };
+
+    async insertVerdict({ commitment_id, attempt_number, evidence_uri }) {
+      // ignoreDuplicates makes this idempotent: replays of the same
+      // VerdictRequested event won't overwrite a later status.
+      const { data, error } = await client
+        .from('oracle_verdicts')
+        .upsert(
+          {
+            commitment_id,
+            attempt_number,
+            status: 'pending',
+            evidence_uri,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'commitment_id,attempt_number', ignoreDuplicates: true },
+        )
+        .select('commitment_id');
+      if (error) throw new Error(`insertVerdict: ${error.message}`);
+      return { inserted: (data?.length ?? 0) > 0 };
     },
-    markVerdictSubmitted({ commitment_id, attempt_number, passed, reason, tx_hash }) {
-      stmts.markSubmitted.run(passed ? 1 : 0, reason, tx_hash, commitment_id, attempt_number);
+
+    async markVerdictSubmitted({ commitment_id, attempt_number, passed, reason, tx_hash }) {
+      const { error } = await client
+        .from('oracle_verdicts')
+        .update({
+          status: 'submitted',
+          passed,
+          reason,
+          tx_hash,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('commitment_id', commitment_id)
+        .eq('attempt_number', attempt_number);
+      if (error) throw new Error(`markVerdictSubmitted: ${error.message}`);
     },
-    markVerdictFailed({ commitment_id, attempt_number, reason }) {
-      stmts.markFailed.run(reason, commitment_id, attempt_number);
+
+    async markVerdictFailed({ commitment_id, attempt_number, reason }) {
+      const { error } = await client
+        .from('oracle_verdicts')
+        .update({
+          status: 'failed',
+          reason,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('commitment_id', commitment_id)
+        .eq('attempt_number', attempt_number);
+      if (error) throw new Error(`markVerdictFailed: ${error.message}`);
     },
-    getPendingVerdicts() {
-      return stmts.getPending.all() as VerdictRow[];
+
+    async getPendingVerdicts(): Promise<VerdictRow[]> {
+      const { data, error } = await client
+        .from('oracle_verdicts')
+        .select('commitment_id, attempt_number, status, passed, reason, tx_hash, evidence_uri')
+        .eq('status', 'pending')
+        .order('updated_at', { ascending: true });
+      if (error) throw new Error(`getPendingVerdicts: ${error.message}`);
+      return (data ?? []) as VerdictRow[];
     },
+
     close() {
-      raw.close();
+      // no-op — Supabase client holds no long-lived connection.
     },
   };
 }

@@ -5,13 +5,15 @@ Three services; three deploy targets.
 | Service  | What it does                                    | Where it belongs                              |
 |----------|-------------------------------------------------|-----------------------------------------------|
 | `web/`   | Next.js UI, Server Components, API routes       | **Vercel** (or any Node host)                 |
-| `indexer/` | Long-running daemon, chain → Supabase mirror  | Fly.io / Railway / a VPS — **not** Vercel     |
-| `oracle/`  | Long-running daemon, judges evidence + signs   | Fly.io / Railway / a VPS — **not** Vercel     |
+| `indexer/` | Long-running daemon, chain → Supabase mirror  | Railway / a VPS — **not** Vercel              |
+| `oracle/`  | Long-running daemon, judges evidence + signs   | Railway / a VPS — **not** Vercel              |
 
 Vercel is for the web app only. The two daemons must run on a platform that
-supports long-lived processes. The quickest path: leave the daemons running
-locally (or any always-on machine) while the web is on Vercel. Everyone
-connects to the same Supabase project, so the system works end-to-end.
+supports long-lived processes. Both daemons are stateless (all persistence
+lives in Supabase), so any host that can keep a Node process running will
+do. The quickest path: leave the daemons running locally (or any always-on
+machine) while the web is on Vercel. Everyone connects to the same Supabase
+project, so the system works end-to-end.
 
 ---
 
@@ -22,7 +24,7 @@ connects to the same Supabase project, so the system works end-to-end.
 | `DEPLOYER_PRIVATE_KEY`       | Your laptop (deploy only)  | Never goes to any host. Used once, to deploy.      |
 | `ORACLE_PRIVATE_KEY`         | Oracle host only           | Signs `submitVerdict` on-chain.                    |
 | `OPENAI_API_KEY`             | Oracle host only           | Never touches the web app.                         |
-| `SUPABASE_SERVICE_ROLE_KEY`  | Indexer + Vercel (server)  | Bypasses RLS. Vercel stores as a non-public env.   |
+| `SUPABASE_SERVICE_ROLE_KEY`  | Indexer + Oracle + Vercel (server) | Bypasses RLS. Vercel stores as a non-public env. |
 | `SUPABASE_ANON_KEY`          | Web (public)               | Safe to ship to the browser; RLS enforces access.  |
 | `ETHERSCAN_API_KEY`          | Your laptop (deploy only)  | Only for `--verify`.                               |
 
@@ -99,109 +101,68 @@ stay local and are never pushed.
 
 When you're ready to host them properly:
 
-### Option A: Railway (recommended; two services, one GitHub repo)
+### Option A: Railway (recommended)
 
-Railway auto-deploys from GitHub on every push and uses our existing
-Dockerfiles. Both services fit under the free $5/mo credit.
+Railway auto-deploys on `git push` to the tracked branch, supports
+Dockerfile-per-service, and builds from the monorepo root. Neither daemon
+needs a volume — oracle state lives in Supabase (`oracle_cursor`,
+`oracle_tasks`, `oracle_verdicts` tables from migration `0002_oracle_state.sql`).
 
 **One-time setup:**
 
-1. <https://railway.com> → sign in with GitHub.
-2. Click **+ New Project → Deploy from GitHub repo** → pick `maokner/procrastinot`.
-3. Railway auto-creates a service guessing at the build — ignore / delete that
-   service; we'll configure two explicit ones instead.
+1. <https://railway.app> → **New Project → Deploy from GitHub repo** → pick
+   `procrastinot`.
+2. Inside the project, create **two services** (each wired to the same
+   repo). Name them `procrastinot-indexer` and `procrastinot-oracle`.
+3. For each service, open **Settings → Source** and set:
+   - **Root Directory**: `/` (repo root — the Dockerfiles reach into
+     `packages/abi` and `pnpm-workspace.yaml`).
+   - **Dockerfile Path**: `indexer/Dockerfile` for the indexer service;
+     `oracle/Dockerfile` for the oracle service.
+   - **Watch Paths** (optional, avoids redeploying on unrelated changes):
+     - indexer: `indexer/**, packages/abi/**, pnpm-lock.yaml, pnpm-workspace.yaml`
+     - oracle:  `oracle/**, packages/abi/**, pnpm-lock.yaml, pnpm-workspace.yaml`
 
-**Service 1 — indexer:**
+**Environment variables (Railway → each service → Variables):**
 
-1. Inside the project, click **+ New → GitHub Repo → procrastinot**.
-2. Rename the service to `indexer`.
-3. **Settings → Source**
-   - Repository: `maokner/procrastinot`, Branch: `main`
-   - Root Directory: `/`  (build context is the repo root — the Dockerfile
-     copies from `packages/abi`, so it needs the whole tree)
-   - Watch Paths: `indexer/**`, `packages/abi/**`, `pnpm-lock.yaml` (so
-     unrelated commits don't trigger rebuilds)
-4. **Settings → Build**
-   - Builder: **Dockerfile**
-   - Dockerfile Path: `indexer/Dockerfile`
-5. **Variables** (add these):
-   ```
-   RPC_URL=<your Sepolia RPC — Alchemy strongly recommended>
-   CHAIN=sepolia
-   CONTRACT_ADDRESS=0x25DF2268051203cf73beb8cD9Cd55c313370FB26
-   START_BLOCK=10694179
-   POLL_INTERVAL_MS=5000
-   BACKFILL_CHUNK=5000
-   SUPABASE_URL=<your Supabase URL>
-   SUPABASE_SERVICE_ROLE_KEY=<your service-role key — mark Sealed in the UI>
-   ```
-6. **Settings → Deploy** → Restart Policy: `Always`. No exposed port needed
-   (the indexer doesn't listen).
-7. Deploy.
+Indexer:
 
-**Service 2 — oracle:** repeat the same flow, with:
-- Service name: `oracle`
-- Dockerfile Path: `oracle/Dockerfile`
-- Watch Paths: `oracle/**`, `packages/abi/**`, `pnpm-lock.yaml`
-- Variables:
-  ```
-  RPC_URL=<same Sepolia RPC>
-  CHAIN=sepolia
-  CONTRACT_ADDRESS=0x25DF2268051203cf73beb8cD9Cd55c313370FB26
-  START_BLOCK=10694179
-  POLL_INTERVAL_MS=5000
-  ORACLE_PRIVATE_KEY=<oracle signer's private key — Sealed>
-  OPENAI_API_KEY=<Sealed>
-  OPENAI_MODEL=gpt-4o-mini
-  DB_PATH=/data/oracle.db
-  ```
-  Also attach a **volume** mounted at `/data` so the SQLite dedupe state
-  survives redeploys: Service → Settings → Volumes → Add Volume → `/data`
-  (1 GB is way more than enough).
-
-**Verifying it works:**
-
-- Each service's **Deploy Logs** should show the build succeeding and then
-  streaming pino JSON logs (`poller.start`, `backfill.done`, `poll.tick`).
-- Kill the local indexer / oracle you were running (`pkill -f "tsx watch"`);
-  the Vercel-hosted web should still pick up events via the Railway-hosted
-  indexer.
-- If you push a commit touching `indexer/`, Railway rebuilds only the indexer
-  service (Watch Paths doing their job).
-
-### Option B: Fly.io (also great; Dockerfiles already included)
-
-```bash
-# one-time
-brew install flyctl
-fly auth login
-
-# indexer
-cd indexer
-fly launch --no-deploy          # name it procrastinot-indexer
-fly secrets set SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… \
-                RPC_URL=… CONTRACT_ADDRESS=0x25DF… \
-                START_BLOCK=10694179 POLL_INTERVAL_MS=5000 BACKFILL_CHUNK=5000
-fly deploy
-
-# oracle
-cd ../oracle
-fly launch --no-deploy          # name it procrastinot-oracle
-fly secrets set RPC_URL=… CONTRACT_ADDRESS=0x25DF… \
-                ORACLE_PRIVATE_KEY=… OPENAI_API_KEY=… \
-                OPENAI_MODEL=gpt-4o-mini POLL_INTERVAL_MS=5000
-fly deploy
+```
+RPC_URL=<Alchemy or Infura Sepolia URL>
+SUPABASE_URL=<your Supabase URL>
+SUPABASE_SERVICE_ROLE_KEY=<your service-role key>
+CONTRACT_ADDRESS=0x25DF2268051203cf73beb8cD9Cd55c313370FB26
+START_BLOCK=<deploy block of the contract>
+# optional: CHAIN, POLL_INTERVAL_MS, BACKFILL_CHUNK
 ```
 
-Both are stateless (oracle's SQLite can be rebuilt; it's just a dedupe
-cache). Scale to `min=1` so they stay warm.
+Oracle:
 
-### Option B: Railway
+```
+RPC_URL=<Alchemy or Infura Sepolia URL>
+ORACLE_PRIVATE_KEY=<oracle signer key, funded with Sepolia ETH>
+OPENAI_API_KEY=<your OpenAI key>
+SUPABASE_URL=<your Supabase URL>
+SUPABASE_SERVICE_ROLE_KEY=<your service-role key>
+CONTRACT_ADDRESS=0x25DF2268051203cf73beb8cD9Cd55c313370FB26
+START_BLOCK=<deploy block of the contract>
+# optional: CHAIN, POLL_INTERVAL_MS, OPENAI_MODEL
+```
 
-Similar pattern — create two services, point each at `indexer/` and
-`oracle/` subdirectories, set the same env vars through the Railway UI.
+**Volumes:** none. Both daemons are stateless.
 
-### Option C: A VPS
+**Deploy:** Railway triggers a build automatically on the next push. Watch
+the service logs:
+
+- Indexer: `poller.start`, `backfill.done`, `poll.tick`
+- Oracle: `poll.tick`, and eventually a `submitVerdict` tx hash
+
+Once both services are green, kill any local daemons (`pkill -f "tsx watch"`).
+
+**Redeploys:** automatic on `git push`. Restart a service manually from
+the Railway dashboard if needed.
+
+### Option B: A VPS
 
 `systemd` unit files, `docker-compose up -d`, or `pm2 start`. Any process
 supervisor works.
@@ -210,7 +171,7 @@ supervisor works.
 
 ## First-deploy checklist
 
-- [ ] Supabase migration applied: `supabase/migrations/0001_init.sql` run in the Supabase SQL editor.
+- [ ] Supabase migrations applied in order: `supabase/migrations/0001_init.sql` then `supabase/migrations/0002_oracle_state.sql`, both run in the Supabase SQL editor.
 - [ ] Supabase Auth → URL Configuration updated with the Vercel URL.
 - [ ] Vercel env vars added (eight total; one marked server-only).
 - [ ] `RPC_URL` in web + indexer + oracle upgraded from the public node to Alchemy / Infura.
@@ -224,7 +185,7 @@ supervisor works.
 
 If any secret leaks (git push, screenshare, screenshot):
 
-- `SUPABASE_SERVICE_ROLE_KEY`: Dashboard → Settings → API → **Reset service role key**. Then update on Vercel + indexer host.
+- `SUPABASE_SERVICE_ROLE_KEY`: Dashboard → Settings → API → **Reset service role key**. Then update on Vercel + indexer host + oracle host.
 - `ORACLE_PRIVATE_KEY`: transfer any remaining ETH out of the old address, generate a fresh keypair, update `oracle/.env`, then call `setOracle(newAddress)` on the contract as the owner.
 - `OPENAI_API_KEY`: revoke at <https://platform.openai.com/api-keys>, mint a new one, update oracle host.
 - `DEPLOYER_PRIVATE_KEY`: only used at deploy time, but if it leaks, move your ETH out.

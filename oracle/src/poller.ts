@@ -52,7 +52,7 @@ export function createPoller(args: {
         logger.warn({ log }, 'poller.commitmentCreated.missingArgs');
         continue;
       }
-      db.upsertTask({
+      await db.upsertTask({
         commitment_id: a.id.toString(),
         task: a.task,
         rubric: a.rubric,
@@ -66,7 +66,7 @@ export function createPoller(args: {
         logger.warn({ log }, 'poller.verdictRequested.missingArgs');
         continue;
       }
-      const res = db.insertVerdict({
+      const res = await db.insertVerdict({
         commitment_id: a.id.toString(),
         attempt_number: Number(a.attemptNumber),
         evidence_uri: a.evidenceURI,
@@ -84,7 +84,7 @@ export function createPoller(args: {
 
   async function scanNewEvents(): Promise<void> {
     const latest = await clients.publicClient.getBlockNumber();
-    const stored = db.getCursor();
+    const stored = await db.getCursor();
     let cursor = stored ?? config.startBlock - 1n;
     if (cursor < config.startBlock - 1n) cursor = config.startBlock - 1n;
 
@@ -94,13 +94,13 @@ export function createPoller(args: {
       const to = from + SCAN_CHUNK_BLOCKS - 1n > latest ? latest : from + SCAN_CHUNK_BLOCKS - 1n;
       logger.debug({ from: from.toString(), to: to.toString() }, 'poller.scan.chunk');
       await ingestEventsChunk(from, to);
-      db.setCursor(to);
+      await db.setCursor(to);
       cursor = to;
     }
   }
 
   async function processPendingVerdicts(): Promise<void> {
-    const pending = db.getPendingVerdicts();
+    const pending = await db.getPendingVerdicts();
     for (const row of pending) {
       if (stopping) return;
       await processOne(row.commitment_id, row.attempt_number, row.evidence_uri);
@@ -117,7 +117,7 @@ export function createPoller(args: {
 
     if (evidenceUri === null) {
       log.error('poller.pending.missingEvidenceUri');
-      db.markVerdictFailed({
+      await db.markVerdictFailed({
         commitment_id: commitmentIdStr,
         attempt_number: attemptNumber,
         reason: 'internal: missing evidence_uri',
@@ -125,7 +125,7 @@ export function createPoller(args: {
       return;
     }
 
-    const task = db.getTask(commitmentIdStr);
+    const task = await db.getTask(commitmentIdStr);
     if (!task) {
       // CommitmentCreated event hasn't been ingested yet (e.g. race with
       // reorg or START_BLOCK set too late). Leave pending — next tick may
@@ -141,7 +141,7 @@ export function createPoller(args: {
       onchain = await getCommitment(clients, commitmentId);
     } catch (err) {
       log.error({ err: (err as Error).message }, 'poller.readCommitment.failed');
-      db.markVerdictFailed({
+      await db.markVerdictFailed({
         commitment_id: commitmentIdStr,
         attempt_number: attemptNumber,
         reason: `readContract failed: ${(err as Error).message}`,
@@ -151,7 +151,7 @@ export function createPoller(args: {
 
     if (onchain.status !== Status.Active) {
       log.info({ status: onchain.status }, 'poller.commitment.alreadyResolved');
-      db.markVerdictSubmitted({
+      await db.markVerdictSubmitted({
         commitment_id: commitmentIdStr,
         attempt_number: attemptNumber,
         passed: false,
@@ -184,7 +184,7 @@ export function createPoller(args: {
         verdict = await judge.judge({ task: task.task, rubric: task.rubric, evidence });
       } catch (err) {
         log.error({ err: (err as Error).message }, 'poller.judge.failed');
-        db.markVerdictFailed({
+        await db.markVerdictFailed({
           commitment_id: commitmentIdStr,
           attempt_number: attemptNumber,
           reason: `judge failed: ${(err as Error).message}`,
@@ -204,7 +204,7 @@ export function createPoller(args: {
       });
     } catch (err) {
       log.error({ err: (err as Error).message }, 'poller.submitVerdict.failed');
-      db.markVerdictFailed({
+      await db.markVerdictFailed({
         commitment_id: commitmentIdStr,
         attempt_number: attemptNumber,
         reason: `submitVerdict failed: ${(err as Error).message}`,
@@ -212,7 +212,7 @@ export function createPoller(args: {
       return;
     }
 
-    db.markVerdictSubmitted({
+    await db.markVerdictSubmitted({
       commitment_id: commitmentIdStr,
       attempt_number: attemptNumber,
       passed: verdict.passed,

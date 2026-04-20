@@ -55,11 +55,11 @@ export function createChainClients(config: Config): ChainClients {
  * contract stores only `taskHash`), so the poller caches them as it ingests
  * events.
  */
-export function getCommitmentTask(
+export async function getCommitmentTask(
   db: OracleDb,
   commitmentId: bigint,
-): { task: string; rubric: string } | undefined {
-  const row = db.getTask(commitmentId.toString());
+): Promise<{ task: string; rubric: string } | undefined> {
+  const row = await db.getTask(commitmentId.toString());
   if (!row) return undefined;
   return { task: row.task, rubric: row.rubric };
 }
