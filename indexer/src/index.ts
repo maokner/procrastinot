@@ -18,15 +18,17 @@ async function main(): Promise<void> {
   const poller = createPoller({ config, db, clients });
 
   let shuttingDown = false;
-  const shutdown = async (signal: string) => {
+  // exitCode = 0 for clean shutdowns (SIGINT/SIGTERM), non-zero for errors.
+  // Hosts like Railway restart only on non-zero when policy is "On Failure".
+  const shutdown = async (signal: string, exitCode = 0) => {
     if (shuttingDown) return;
     shuttingDown = true;
-    logger.info({ signal }, 'indexer.shutdown.start');
+    logger.info({ signal, exitCode }, 'indexer.shutdown.start');
     try {
       await poller.stop();
     } finally {
       logger.info('indexer.shutdown.done');
-      process.exit(0);
+      process.exit(exitCode);
     }
   };
 
@@ -34,11 +36,11 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
   process.on('uncaughtException', (err) => {
     logger.fatal({ err: err.message, stack: err.stack }, 'indexer.uncaughtException');
-    void shutdown('uncaughtException');
+    void shutdown('uncaughtException', 1);
   });
   process.on('unhandledRejection', (reason) => {
     logger.fatal({ reason: String(reason) }, 'indexer.unhandledRejection');
-    void shutdown('unhandledRejection');
+    void shutdown('unhandledRejection', 1);
   });
 
   await poller.start();
