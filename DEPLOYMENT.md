@@ -41,9 +41,10 @@ address, RPC URL, Supabase URL, and anon key are public.
 
 1. <https://vercel.com/new>
 2. Pick the `maokner/procrastinot` repo.
-3. **Leave the root directory as `.` (repo root).** The bundled `vercel.json`
-   instructs Vercel how to build the monorepo.
-4. Framework preset: Next.js (auto-detected).
+3. **Set Root Directory to `web`.** The `web/vercel.json` config overrides
+   install/build to run at the repo root, so the pnpm workspace resolves
+   `@procrastinot/abi`.
+4. Framework preset: Next.js (auto-detected once root is `web`).
 5. Click **Environment Variables** and add the entries from the list below.
 6. Deploy.
 
