@@ -99,7 +99,77 @@ stay local and are never pushed.
 
 When you're ready to host them properly:
 
-### Option A: Fly.io (recommended; Dockerfiles already included)
+### Option A: Railway (recommended; two services, one GitHub repo)
+
+Railway auto-deploys from GitHub on every push and uses our existing
+Dockerfiles. Both services fit under the free $5/mo credit.
+
+**One-time setup:**
+
+1. <https://railway.com> → sign in with GitHub.
+2. Click **+ New Project → Deploy from GitHub repo** → pick `maokner/procrastinot`.
+3. Railway auto-creates a service guessing at the build — ignore / delete that
+   service; we'll configure two explicit ones instead.
+
+**Service 1 — indexer:**
+
+1. Inside the project, click **+ New → GitHub Repo → procrastinot**.
+2. Rename the service to `indexer`.
+3. **Settings → Source**
+   - Repository: `maokner/procrastinot`, Branch: `main`
+   - Root Directory: `/`  (build context is the repo root — the Dockerfile
+     copies from `packages/abi`, so it needs the whole tree)
+   - Watch Paths: `indexer/**`, `packages/abi/**`, `pnpm-lock.yaml` (so
+     unrelated commits don't trigger rebuilds)
+4. **Settings → Build**
+   - Builder: **Dockerfile**
+   - Dockerfile Path: `indexer/Dockerfile`
+5. **Variables** (add these):
+   ```
+   RPC_URL=<your Sepolia RPC — Alchemy strongly recommended>
+   CHAIN=sepolia
+   CONTRACT_ADDRESS=0x25DF2268051203cf73beb8cD9Cd55c313370FB26
+   START_BLOCK=10694179
+   POLL_INTERVAL_MS=5000
+   BACKFILL_CHUNK=5000
+   SUPABASE_URL=<your Supabase URL>
+   SUPABASE_SERVICE_ROLE_KEY=<your service-role key — mark Sealed in the UI>
+   ```
+6. **Settings → Deploy** → Restart Policy: `Always`. No exposed port needed
+   (the indexer doesn't listen).
+7. Deploy.
+
+**Service 2 — oracle:** repeat the same flow, with:
+- Service name: `oracle`
+- Dockerfile Path: `oracle/Dockerfile`
+- Watch Paths: `oracle/**`, `packages/abi/**`, `pnpm-lock.yaml`
+- Variables:
+  ```
+  RPC_URL=<same Sepolia RPC>
+  CHAIN=sepolia
+  CONTRACT_ADDRESS=0x25DF2268051203cf73beb8cD9Cd55c313370FB26
+  START_BLOCK=10694179
+  POLL_INTERVAL_MS=5000
+  ORACLE_PRIVATE_KEY=<oracle signer's private key — Sealed>
+  OPENAI_API_KEY=<Sealed>
+  OPENAI_MODEL=gpt-4o-mini
+  DB_PATH=/data/oracle.db
+  ```
+  Also attach a **volume** mounted at `/data` so the SQLite dedupe state
+  survives redeploys: Service → Settings → Volumes → Add Volume → `/data`
+  (1 GB is way more than enough).
+
+**Verifying it works:**
+
+- Each service's **Deploy Logs** should show the build succeeding and then
+  streaming pino JSON logs (`poller.start`, `backfill.done`, `poll.tick`).
+- Kill the local indexer / oracle you were running (`pkill -f "tsx watch"`);
+  the Vercel-hosted web should still pick up events via the Railway-hosted
+  indexer.
+- If you push a commit touching `indexer/`, Railway rebuilds only the indexer
+  service (Watch Paths doing their job).
+
+### Option B: Fly.io (also great; Dockerfiles already included)
 
 ```bash
 # one-time

@@ -21,7 +21,8 @@ RUN pnpm install --frozen-lockfile
 COPY packages/abi packages/abi
 COPY oracle oracle
 
-RUN pnpm --filter oracle build
+RUN pnpm --filter @procrastinot/abi build \
+ && pnpm --filter oracle build
 
 # ---------- runtime stage ----------
 FROM node:20-alpine AS runtime
