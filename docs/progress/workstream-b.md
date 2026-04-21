@@ -7,7 +7,7 @@
 ## Checklist
 
 - [x] B1 — Create `web/components/layout/AppHeader.tsx` (server component)
-- [ ] B2 — Create `web/components/layout/SessionMenu.tsx` (client component)
+- [x] B2 — Create `web/components/layout/SessionMenu.tsx` (client component)
 - [ ] B3 — Mount `<AppHeader />` in `web/app/layout.tsx`
 - [ ] B4 — Delete `SignOutButton.tsx`; remove duplicate button from `settings/page.tsx`
 - [ ] B5 — Mobile hamburger collapse at `< md`
@@ -20,4 +20,4 @@
 
 ## Next action on resume
 
-B1 done. Next: mark B2 off — `SessionMenu.tsx` is already written alongside AppHeader (required for AppHeader to compile). Just need the progress tick + commit.
+B2 done. Next: B3 — mount `<AppHeader />` in `web/app/layout.tsx` inside the Providers tree.
