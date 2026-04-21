@@ -2,6 +2,7 @@
 pragma solidity 0.8.24;
 
 import {Test} from "forge-std/Test.sol";
+import {Ownable} from "@openzeppelin/access/Ownable.sol";
 import {Procrastinot} from "../src/Procrastinot.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
 import {MaliciousToken} from "./mocks/MaliciousToken.sol";
@@ -342,6 +343,73 @@ contract ProcrastinotTest is Test {
     // ---------------------------------------------------------------
     // 8. Accounting invariant
     // ---------------------------------------------------------------
+
+    // ---------------------------------------------------------------
+    // 9. Owner-only setters: zero-address guards
+    // ---------------------------------------------------------------
+
+    function testSetOracleRejectsZeroAddress() public {
+        vm.expectRevert(Procrastinot.InvalidOracle.selector);
+        p.setOracle(address(0));
+    }
+
+    function testSetOperatorWalletRejectsZeroAddress() public {
+        vm.expectRevert(Procrastinot.InvalidOperator.selector);
+        p.setOperatorWallet(address(0));
+    }
+
+    function testSetOracleHappyPath() public {
+        address newOracle = makeAddr("newOracle");
+        p.setOracle(newOracle);
+        assertEq(p.oracle(), newOracle);
+    }
+
+    function testSetOperatorWalletHappyPath() public {
+        address newOperator = makeAddr("newOperator");
+        p.setOperatorWallet(newOperator);
+        assertEq(p.operatorWallet(), newOperator);
+    }
+
+    // ---------------------------------------------------------------
+    // 10. Two-step ownership handoff (Ownable2Step)
+    // ---------------------------------------------------------------
+
+    function testTwoStepOwnershipHandoff() public {
+        address newOwner = makeAddr("newOwner");
+
+        // Current owner (this test contract) starts the transfer.
+        p.transferOwnership(newOwner);
+
+        // Current owner is unchanged; pendingOwner is set.
+        assertEq(p.owner(), address(this));
+        assertEq(p.pendingOwner(), newOwner);
+
+        // A random address cannot accept.
+        vm.prank(rando);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, rando));
+        p.acceptOwnership();
+
+        // Even the old owner cannot accept on behalf of the pending owner.
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(this)));
+        p.acceptOwnership();
+
+        // Pending owner accepts.
+        vm.prank(newOwner);
+        p.acceptOwnership();
+
+        assertEq(p.owner(), newOwner);
+        assertEq(p.pendingOwner(), address(0));
+
+        // The old owner can no longer call onlyOwner functions.
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(this)));
+        p.setOracle(makeAddr("anotherOracle"));
+
+        // The new owner can.
+        address anotherOracle = makeAddr("anotherOracle");
+        vm.prank(newOwner);
+        p.setOracle(anotherOracle);
+        assertEq(p.oracle(), anotherOracle);
+    }
 
     function testAccountingInvariant() public {
         // Create three commitments.

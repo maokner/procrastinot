@@ -8,8 +8,8 @@
 
 - [x] D1 — Swap `Ownable` for `Ownable2Step` in `contracts/src/Procrastinot.sol`
 - [x] D2 — Add `InvalidOracle` / `InvalidOperator` custom errors + zero-address guards on `setOracle` / `setOperatorWallet`
-- [ ] D3 — Extend `contracts/test/Procrastinot.t.sol` with zero-address revert tests + two-step ownership handoff test
-- [ ] D4 — Run `forge test` and confirm full suite passes
+- [x] D3 — Extend `contracts/test/Procrastinot.t.sol` with zero-address revert tests + two-step ownership handoff test
+- [x] D4 — Run `forge test` and confirm full suite passes
 - [ ] D5 — Document deployment implications (user action)
 - [ ] D6 — User deploys new contract on Sepolia, tests two-step ownership handoff (user action)
 
@@ -20,4 +20,4 @@
 
 ## Next action on resume
 
-Implement D3: add zero-address revert tests + two-step ownership handoff test to `contracts/test/Procrastinot.t.sol`.
+D5/D6 are user-deploy actions. See notes for the deploy steps. Agent stops here pending user action.
