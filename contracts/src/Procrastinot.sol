@@ -5,13 +5,14 @@ import {IERC20} from "@openzeppelin/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/utils/ReentrancyGuard.sol";
 import {Ownable} from "@openzeppelin/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/access/Ownable2Step.sol";
 
 /// @title Procrastinot
 /// @notice On-chain commitment contract. A user stakes USDC against a deadline;
 ///         an oracle verifies whether the task was done. On success the user gets
 ///         their stake back; on failure (or on missed deadline) the stake goes to
 ///         the nominated "enemy".
-contract Procrastinot is ReentrancyGuard, Ownable {
+contract Procrastinot is ReentrancyGuard, Ownable2Step {
     using SafeERC20 for IERC20;
 
     // ---------------------------------------------------------------------
