@@ -7,7 +7,7 @@
 ## Checklist
 
 - [x] D1 — Swap `Ownable` for `Ownable2Step` in `contracts/src/Procrastinot.sol`
-- [ ] D2 — Add `InvalidOracle` / `InvalidOperator` custom errors + zero-address guards on `setOracle` / `setOperatorWallet`
+- [x] D2 — Add `InvalidOracle` / `InvalidOperator` custom errors + zero-address guards on `setOracle` / `setOperatorWallet`
 - [ ] D3 — Extend `contracts/test/Procrastinot.t.sol` with zero-address revert tests + two-step ownership handoff test
 - [ ] D4 — Run `forge test` and confirm full suite passes
 - [ ] D5 — Document deployment implications (user action)
@@ -20,4 +20,4 @@
 
 ## Next action on resume
 
-Implement D2: add `InvalidOracle` / `InvalidOperator` errors and zero-address guards in `setOracle` / `setOperatorWallet`.
+Implement D3: add zero-address revert tests + two-step ownership handoff test to `contracts/test/Procrastinot.t.sol`.

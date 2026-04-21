@@ -67,6 +67,8 @@ contract Procrastinot is ReentrancyGuard, Ownable2Step {
     error ZeroStake();
     error BadDeadline();
     error BadEnemy();
+    error InvalidOracle();
+    error InvalidOperator();
 
     // ---------------------------------------------------------------------
     // Events
@@ -227,11 +229,13 @@ contract Procrastinot is ReentrancyGuard, Ownable2Step {
     // ---------------------------------------------------------------------
 
     function setOracle(address newOracle) external onlyOwner {
+        if (newOracle == address(0)) revert InvalidOracle();
         emit OracleUpdated(oracle, newOracle);
         oracle = newOracle;
     }
 
     function setOperatorWallet(address newOperator) external onlyOwner {
+        if (newOperator == address(0)) revert InvalidOperator();
         emit OperatorWalletUpdated(operatorWallet, newOperator);
         operatorWallet = newOperator;
     }
