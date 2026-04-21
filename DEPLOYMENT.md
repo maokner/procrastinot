@@ -61,9 +61,11 @@ default for server-only vars).
 | `NEXT_PUBLIC_CHAIN_ID`          | `11155111`                                                | all                  |
 | `NEXT_PUBLIC_RPC_URL`           | an Alchemy/Infura Sepolia URL (recommended; public nodes are flaky) | all                  |
 | `NEXT_PUBLIC_WALLETCONNECT_ID`  | optional — <https://cloud.walletconnect.com>              | all                  |
+| `NEXT_PUBLIC_SITE_URL`          | canonical public origin of the app, e.g. `https://your-app.vercel.app` | all |
 | `NEXT_PUBLIC_SUPABASE_URL`      | your Supabase project URL                                 | all                  |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | your Supabase `anon` key                                  | all                  |
 | `SUPABASE_SERVICE_ROLE_KEY`     | your Supabase `service_role` key — **not** NEXT_PUBLIC_    | **server-only**      |
+| `SIWE_JWT_SECRET`               | Supabase → Settings → API → JWT Secret                    | **server-only**      |
 
 ### 4. Add Vercel's deploy URL to Supabase's redirect allowlist
 
@@ -77,10 +79,15 @@ If you later add a custom domain, repeat this step for the custom domain.
 
 ### 5. SIWE domain binding
 
-The SIWE verifier checks that the signed message's domain matches the
-request host. Nothing to do here — `web/app/api/siwe/verify/route.ts`
-derives the domain from the incoming request, so it works automatically
-on both Vercel and localhost.
+Set `NEXT_PUBLIC_SITE_URL` to the exact public origin users will visit for
+that environment. The SIWE verifier prefers this value over the raw request
+`Host` header when binding the signed domain, which avoids trusting a proxy-
+supplied host name.
+
+Examples:
+
+- production: `https://your-app.vercel.app`
+- local dev: leave it unset and the verifier will fall back to the request host
 
 ---
 
@@ -174,11 +181,20 @@ supervisor works.
 
 - [ ] Supabase migrations applied in order: `supabase/migrations/0001_init.sql` then `supabase/migrations/0002_oracle_state.sql`, both run in the Supabase SQL editor.
 - [ ] Supabase Auth → URL Configuration updated with the Vercel URL.
-- [ ] Vercel env vars added (eight total; one marked server-only).
+- [ ] Vercel env vars added, including `NEXT_PUBLIC_SITE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SIWE_JWT_SECRET`.
 - [ ] `RPC_URL` in web + indexer + oracle upgraded from the public node to Alchemy / Infura.
 - [ ] Oracle wallet funded with Sepolia ETH (gas for `submitVerdict`).
 - [ ] Oracle + indexer running somewhere (local is fine for demo).
-- [ ] You can visit the Vercel URL, sign up, link a wallet via SIWE, create a commitment, and see it appear in Postgres (indexer working) and eventually get judged (oracle working).
+- [ ] You can visit the Vercel URL, connect a wallet via SIWE, choose a username on `/onboarding`, create a commitment, and see it appear in Postgres (indexer working) and eventually get judged (oracle working).
+
+---
+
+## Post-deploy checkpoints
+
+- **Session header + disconnect:** after signing in, the global header should render on protected routes like `/my`, `/create`, `/c/[id]`, and `/settings`. On mobile it collapses behind the hamburger menu in `web/components/layout/AppHeader.tsx`. Use the `SessionMenu` disconnect action and confirm you land on `/login`, the wallet connector is disconnected, and a reload does not resurrect the Supabase session.
+- **Hardened contract rollout:** the `Ownable2Step` and zero-address guard changes require a fresh deployment. `contracts/script/Deploy.s.sol` deploys a plain `Procrastinot` instance rather than an upgradeable proxy, so an existing Sepolia deployment cannot be patched in place.
+- **Address rotation after redeploy:** once the new contract is live, update `NEXT_PUBLIC_CONTRACT_ADDRESS` on Vercel and `CONTRACT_ADDRESS` for the indexer, oracle, and local `.env` files before restarting services.
+- **Historical data choice:** if you want a clean state under the hardened contract, point the stack at a fresh Supabase project and rerun `supabase/migrations/0001_init.sql` plus `supabase/migrations/0002_oracle_state.sql`. If you keep the existing project, historical rows remain associated with the old contract address.
 
 ---
 

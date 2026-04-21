@@ -2,8 +2,8 @@
 
 /**
  * Top-right user menu. Reads the Supabase session client-side, shows a
- * dropdown with profile / settings / sign out when logged in, or a
- * login/signup pair when logged out.
+ * dropdown with profile / settings / sign out when logged in, or a single
+ * wallet-login link when logged out.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -44,7 +44,7 @@ export function UserMenu() {
         .select('username')
         .eq('id', uid)
         .maybeSingle();
-      const row = data as { username: string } | null;
+      const row = data as { username: string | null } | null;
       setUsername(row?.username ?? null);
     }
 
@@ -80,14 +80,11 @@ export function UserMenu() {
   if (!user) {
     return (
       <div className="flex items-center gap-3">
-        <Link href="/login" className="text-sm text-neutral-400 hover:text-neutral-100">
-          Log in
-        </Link>
         <Link
-          href="/signup"
+          href="/login"
           className="rounded bg-neutral-100 px-3 py-1.5 text-sm font-medium text-neutral-950 hover:bg-white"
         >
-          Sign up
+          Connect wallet
         </Link>
       </div>
     );

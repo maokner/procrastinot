@@ -12,6 +12,7 @@ export type Config = {
   supabaseServiceRoleKey: string;
   pollIntervalMs: number;
   startBlock: bigint;
+  scanChunkBlocks: bigint;
 };
 
 function requireEnv(name: string): string {
@@ -54,6 +55,19 @@ function parseInteger(name: string, raw: string): number {
   return n;
 }
 
+function parsePositiveBigInt(name: string, raw: string): bigint {
+  let v: bigint;
+  try {
+    v = BigInt(raw);
+  } catch {
+    throw new Error(`Env var ${name} must be a positive integer, got "${raw}".`);
+  }
+  if (v <= 0n) {
+    throw new Error(`Env var ${name} must be a positive integer, got "${raw}".`);
+  }
+  return v;
+}
+
 export function loadConfig(): Config {
   const chainRaw = (process.env.CHAIN ?? 'sepolia').toLowerCase();
   if (chainRaw !== 'sepolia' && chainRaw !== 'mainnet') {
@@ -71,5 +85,9 @@ export function loadConfig(): Config {
     supabaseServiceRoleKey: requireEnv('SUPABASE_SERVICE_ROLE_KEY'),
     pollIntervalMs: parseInteger('POLL_INTERVAL_MS', process.env.POLL_INTERVAL_MS ?? '5000'),
     startBlock: parseBigInt('START_BLOCK', requireEnv('START_BLOCK')),
+    scanChunkBlocks: parsePositiveBigInt(
+      'SCAN_CHUNK_BLOCKS',
+      process.env.SCAN_CHUNK_BLOCKS ?? '5000',
+    ),
   };
 }

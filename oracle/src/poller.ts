@@ -8,11 +8,11 @@ import type { OracleDb } from './db.js';
 import type { ChainClients } from './chain.js';
 import { getCommitment, submitVerdict } from './chain.js';
 import { commitmentCreatedEvent, verdictRequestedEvent } from './events.js';
+import type { Evidence } from './evidence.js';
 import { resolveEvidence } from './evidence.js';
 import type { Judge } from './judge.js';
 import { logger } from './logger.js';
-
-const SCAN_CHUNK_BLOCKS = 5_000n;
+import { isTransientError, retry } from './retry.js';
 
 export type Poller = {
   start: () => void;
@@ -29,6 +29,81 @@ export function createPoller(args: {
   let stopping = false;
   let currentTick: Promise<void> | null = null;
   let timer: NodeJS.Timeout | null = null;
+
+  function describeError(err: unknown): string {
+    if (err instanceof Error) return err.message;
+    return String(err);
+  }
+
+  function flattenError(err: unknown): string {
+    const parts: string[] = [];
+    const seen = new Set<unknown>();
+    let current: unknown = err;
+
+    while (current && typeof current === 'object' && !seen.has(current)) {
+      seen.add(current);
+      const entry = current as {
+        name?: unknown;
+        message?: unknown;
+        shortMessage?: unknown;
+        details?: unknown;
+        cause?: unknown;
+      };
+
+      if (typeof entry.name === 'string' && entry.name.length > 0) {
+        parts.push(entry.name);
+      }
+      if (typeof entry.message === 'string' && entry.message.length > 0) {
+        parts.push(entry.message);
+      }
+      if (typeof entry.shortMessage === 'string' && entry.shortMessage.length > 0) {
+        parts.push(entry.shortMessage);
+      }
+      if (typeof entry.details === 'string' && entry.details.length > 0) {
+        parts.push(entry.details);
+      }
+
+      current = entry.cause;
+    }
+
+    if (parts.length === 0) {
+      parts.push(describeError(err));
+    }
+
+    return parts.join('\n');
+  }
+
+  function isReceiptTimeoutError(err: unknown): boolean {
+    const text = flattenError(err);
+    return (
+      /\bWaitForTransactionReceiptTimeoutError\b/.test(text) ||
+      /Timed out while waiting for transaction .* to be confirmed\./i.test(text)
+    );
+  }
+
+  function isInsufficientFundsError(err: unknown): boolean {
+    const text = flattenError(err);
+    return (
+      /\bInsufficientFundsError\b/.test(text) ||
+      /insufficient funds|exceeds transaction sender account balance|exceeds the balance of the account/i.test(
+        text,
+      )
+    );
+  }
+
+  function extractBalanceHint(err: unknown): string {
+    const text = flattenError(err);
+    const patterns = [
+      /\bbalance[:=]\s*([^\n,]+)/i,
+      /\bhave\s+([^\n,]+?)(?:,\s*want|\s*$)/i,
+      /\baccount balance[:=]?\s*([^\n,]+)/i,
+    ];
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match?.[1]) return match[1].trim();
+    }
+    return 'unknown';
+  }
 
   async function ingestEventsChunk(fromBlock: bigint, toBlock: bigint): Promise<void> {
     const [created, requested] = await Promise.all([
@@ -91,7 +166,10 @@ export function createPoller(args: {
     while (cursor < latest) {
       if (stopping) return;
       const from = cursor + 1n;
-      const to = from + SCAN_CHUNK_BLOCKS - 1n > latest ? latest : from + SCAN_CHUNK_BLOCKS - 1n;
+      const to =
+        from + config.scanChunkBlocks - 1n > latest
+          ? latest
+          : from + config.scanChunkBlocks - 1n;
       logger.debug({ from: from.toString(), to: to.toString() }, 'poller.scan.chunk');
       await ingestEventsChunk(from, to);
       await db.setCursor(to);
@@ -138,14 +216,13 @@ export function createPoller(args: {
     // commitment is no longer Active someone else resolved it.
     let onchain;
     try {
-      onchain = await getCommitment(clients, commitmentId);
-    } catch (err) {
-      log.error({ err: (err as Error).message }, 'poller.readCommitment.failed');
-      await db.markVerdictFailed({
-        commitment_id: commitmentIdStr,
-        attempt_number: attemptNumber,
-        reason: `readContract failed: ${(err as Error).message}`,
+      onchain = await retry(() => getCommitment(clients, commitmentId), {
+        tries: 3,
+        baseMs: 500,
+        label: 'chain.getCommitment',
       });
+    } catch (err) {
+      log.error({ err: describeError(err) }, 'poller.readCommitment.pending');
       return;
     }
 
@@ -163,32 +240,23 @@ export function createPoller(args: {
 
     // Resolve evidence. On failure, submit passed=false with the canonical
     // reason (per plan 02).
-    let evidence: string;
+    let evidence: Evidence | null = null;
     let evidenceFailed = false;
     try {
       evidence = await resolveEvidence(evidenceUri);
     } catch (err) {
-      log.warn(
-        { err: (err as Error).message, evidenceUri },
-        'poller.evidence.fetchFailed',
-      );
-      evidence = '';
+      log.warn({ err: describeError(err), evidenceUri }, 'poller.evidence.fetchFailed');
       evidenceFailed = true;
     }
 
     let verdict: { passed: boolean; reason: string };
-    if (evidenceFailed) {
+    if (evidenceFailed || evidence === null) {
       verdict = { passed: false, reason: 'evidence could not be retrieved' };
     } else {
       try {
         verdict = await judge.judge({ task: task.task, rubric: task.rubric, evidence });
       } catch (err) {
-        log.error({ err: (err as Error).message }, 'poller.judge.failed');
-        await db.markVerdictFailed({
-          commitment_id: commitmentIdStr,
-          attempt_number: attemptNumber,
-          reason: `judge failed: ${(err as Error).message}`,
-        });
+        log.error({ err: describeError(err) }, 'poller.judge.pending');
         return;
       }
     }
@@ -203,11 +271,32 @@ export function createPoller(args: {
         reasonHash,
       });
     } catch (err) {
-      log.error({ err: (err as Error).message }, 'poller.submitVerdict.failed');
+      const errorMessage = describeError(err);
+      if (isInsufficientFundsError(err)) {
+        logger.fatal(
+          {
+            commitmentId: commitmentIdStr,
+            attemptNumber,
+            balance: extractBalanceHint(err),
+            err: errorMessage,
+          },
+          'oracle.gasDepleted',
+        );
+        return;
+      }
+      if (isReceiptTimeoutError(err)) {
+        log.warn({ err: errorMessage }, 'poller.submitVerdict.receiptPending');
+        return;
+      }
+      if (isTransientError(err)) {
+        log.warn({ err: errorMessage }, 'poller.submitVerdict.pending');
+        return;
+      }
+      log.error({ err: errorMessage }, 'poller.submitVerdict.failed');
       await db.markVerdictFailed({
         commitment_id: commitmentIdStr,
         attempt_number: attemptNumber,
-        reason: `submitVerdict failed: ${(err as Error).message}`,
+        reason: `submitVerdict failed: ${errorMessage}`,
       });
       return;
     }
@@ -228,7 +317,7 @@ export function createPoller(args: {
       if (stopping) return;
       await processPendingVerdicts();
     } catch (err) {
-      logger.error({ err: (err as Error).message }, 'poller.tick.failed');
+      logger.error({ err: describeError(err) }, 'poller.tick.failed');
     }
   }
 
@@ -250,6 +339,7 @@ export function createPoller(args: {
           contractAddress: config.contractAddress,
           pollIntervalMs: config.pollIntervalMs,
           startBlock: config.startBlock.toString(),
+          scanChunkBlocks: config.scanChunkBlocks.toString(),
         },
         'poller.start',
       );

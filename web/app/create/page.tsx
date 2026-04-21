@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -21,7 +20,6 @@ import {
 import { parseUsdc, etherscanTxUrl } from '@/lib/format';
 import { supabaseBrowser } from '@/lib/supabase';
 import { ConnectGate } from '@/components/ConnectGate';
-import { ConnectButton } from '@/components/ConnectButton';
 
 type Step = 'idle' | 'approving' | 'creating' | 'done' | 'error';
 
@@ -30,12 +28,6 @@ type Suggestion = { username: string; display_name: string | null };
 export default function CreatePage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col px-6 py-8">
-      <header className="mb-8 flex items-center justify-between">
-        <Link href="/" prefetch className="font-mono text-sm uppercase tracking-widest">
-          procrastinot
-        </Link>
-        <ConnectButton />
-      </header>
       <h1 className="mb-6 text-2xl font-semibold">New commitment</h1>
       <ConnectGate>
         <CreateForm />

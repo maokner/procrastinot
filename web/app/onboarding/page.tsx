@@ -1,7 +1,6 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
-import { getProfile, getWallet, requireSession } from '@/lib/auth';
+import { getProfile, hasCompletedOnboarding, requireSession } from '@/lib/auth';
 import { OnboardingClient } from '@/components/auth/OnboardingClient';
 
 export const dynamic = 'force-dynamic';
@@ -10,20 +9,15 @@ export default async function OnboardingPage() {
   const cookieJar = await cookies();
   const user = await requireSession(cookieJar, '/onboarding');
   const profile = await getProfile(cookieJar, user.id);
-  const wallet = await getWallet(cookieJar, user.id);
 
-  if (profile && wallet) redirect('/my');
+  if (hasCompletedOnboarding(profile)) redirect('/my');
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col px-6 py-10">
-      <header className="mb-8 flex items-center justify-between">
-        <Link href="/" className="font-mono text-sm uppercase tracking-widest">
-          procrastinot
-        </Link>
-      </header>
-      <h1 className="mb-2 text-3xl font-semibold tracking-tight">Welcome</h1>
+      <h1 className="mb-2 text-3xl font-semibold tracking-tight">Choose your username</h1>
       <p className="mb-8 text-sm text-neutral-400">
-        Two quick steps and you&apos;re in.
+        Your wallet is already verified. Pick the public handle other players
+        will see, then you&apos;ll land in your dashboard.
       </p>
       <OnboardingClient userId={user.id} initialUsername={profile?.username ?? null} />
     </main>

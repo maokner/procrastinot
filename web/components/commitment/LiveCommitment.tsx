@@ -159,7 +159,13 @@ export function LiveCommitment({
         <p className="whitespace-pre-wrap text-neutral-300">{commitment.rubric}</p>
       </section>
 
-      {canSubmit && <SubmitEvidenceForm id={idBig} />}
+      {canSubmit && (
+        <SubmitEvidenceForm
+          id={idBig}
+          viewerProfileId={viewerProfileId}
+          attempt={commitment.attempts_used + 1}
+        />
+      )}
       {canForfeit && <ForfeitButton id={idBig} />}
       {canClaim && <ClaimButton id={idBig} label={`Claim ${commitment.stake} USDC`} />}
 

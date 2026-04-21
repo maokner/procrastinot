@@ -16,6 +16,12 @@ import { supabaseBrowser } from './supabase';
 
 export const EVIDENCE_BUCKET = 'evidence';
 
+export type EvidenceManifest = {
+  kind: 'images';
+  urls: string[];
+  note?: string;
+};
+
 export type UploadEvidenceArgs = {
   profileId: string;
   commitmentId: string | bigint;
@@ -89,11 +95,7 @@ export async function uploadEvidenceImage(
  * The returned URL is what gets written on-chain via `requestVerdict`.
  */
 export async function uploadEvidenceManifest(
-  manifest: {
-    kind: 'images';
-    urls: string[];
-    note?: string;
-  },
+  manifest: EvidenceManifest,
   args: UploadEvidenceArgs,
 ): Promise<UploadedEvidence> {
   const { profileId, commitmentId, attempt } = args;
@@ -123,10 +125,19 @@ export function isEvidenceStorageUrl(uri: string): boolean {
   if (!uri) return false;
   try {
     const u = new URL(uri);
-    if (!/\.supabase\.co$/.test(u.hostname) && !/\.supabase\.in$/.test(u.hostname)) {
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') {
       return false;
     }
     return u.pathname.includes(`/storage/v1/object/public/${EVIDENCE_BUCKET}/`);
+  } catch {
+    return false;
+  }
+}
+
+export function isEvidenceManifestUrl(uri: string): boolean {
+  if (!isEvidenceStorageUrl(uri)) return false;
+  try {
+    return new URL(uri).pathname.toLowerCase().endsWith('.json');
   } catch {
     return false;
   }

@@ -1,21 +1,29 @@
 /**
- * Next.js middleware — refreshes Supabase auth cookies on every request and
- * gates the private app surface behind auth + completed onboarding.
- *
- * Protected routes: /my, /inbox, /create, /settings
- * (and everything else the matcher catches, except for the public pages
- * explicitly excluded in `config.matcher`).
- *
- * Follows the @supabase/ssr middleware pattern:
- * https://supabase.com/docs/guides/auth/server-side/nextjs
+ * Next.js middleware — refreshes Supabase auth cookies on protected requests,
+ * redirects the legacy /signup route to /login, and treats onboarding as
+ * complete only once `profiles.username` is populated.
  */
 import { NextResponse, type NextRequest } from 'next/server';
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-const PROTECTED_PREFIXES = ['/my', '/inbox', '/create', '/settings'];
+const PROTECTED_PREFIXES = [
+  '/my',
+  '/create',
+  '/inbox',
+  '/c',
+  '/settings',
+  '/profile',
+  '/onboarding',
+];
+
+function matchesProtectedPath(pathname: string): boolean {
+  return PROTECTED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
 
 export async function middleware(request: NextRequest) {
   // Let everything through if Supabase isn't configured yet — avoids breaking
@@ -25,21 +33,30 @@ export async function middleware(request: NextRequest) {
   }
 
   let response = NextResponse.next({ request });
+  const { pathname, search } = request.nextUrl;
+
+  if (pathname === '/signup' || pathname.startsWith('/signup/')) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/login';
+    url.search = '';
+    return NextResponse.redirect(url);
+  }
+
+  if (!matchesProtectedPath(pathname)) {
+    return response;
+  }
 
   const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     cookies: {
-      get(name: string) {
-        return request.cookies.get(name)?.value;
+      getAll() {
+        return request.cookies.getAll();
       },
-      set(name: string, value: string, options: CookieOptions) {
-        request.cookies.set({ name, value, ...options });
+      setAll(cookiesToSet) {
         response = NextResponse.next({ request });
-        response.cookies.set({ name, value, ...options });
-      },
-      remove(name: string, options: CookieOptions) {
-        request.cookies.set({ name, value: '', ...options });
-        response = NextResponse.next({ request });
-        response.cookies.set({ name, value: '', ...options });
+        cookiesToSet.forEach(({ name, value, options }) => {
+          request.cookies.set({ name, value, ...options });
+          response.cookies.set(name, value, options);
+        });
       },
     },
   });
@@ -49,32 +66,31 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
-  const isProtected = PROTECTED_PREFIXES.some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`),
-  );
-
-  if (!isProtected) return response;
-
   if (!user) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
-    url.searchParams.set('next', pathname);
+    url.searchParams.set('next', `${pathname}${search}`);
     return NextResponse.redirect(url);
   }
 
-  // Session is valid — check if the user has completed onboarding (has a
-  // profile row). /onboarding itself is not in PROTECTED_PREFIXES so it's
-  // reachable without infinite-looping.
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id')
+    .select('username')
     .eq('id', user.id)
     .maybeSingle();
 
-  if (!profile) {
+  const hasUsername = Boolean(profile?.username);
+
+  if (!hasUsername && pathname !== '/onboarding') {
     const url = request.nextUrl.clone();
     url.pathname = '/onboarding';
+    url.search = '';
+    return NextResponse.redirect(url);
+  }
+
+  if (hasUsername && pathname === '/onboarding') {
+    const url = request.nextUrl.clone();
+    url.pathname = '/my';
     url.search = '';
     return NextResponse.redirect(url);
   }
@@ -83,10 +99,14 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Exclude Next internals, static assets, and our public routes/APIs. The
-  // auth/siwe API routes do their own auth check (401); middleware shouldn't
-  // redirect them.
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|api/siwe|api/auth|api/users|signup|login|profile|onboarding|$).*)',
+    '/signup',
+    '/my/:path*',
+    '/create/:path*',
+    '/inbox/:path*',
+    '/c/:path*',
+    '/settings/:path*',
+    '/profile/:path*',
+    '/onboarding/:path*',
   ],
 };

@@ -6,7 +6,6 @@ import {
   profilesByIds,
 } from '@/lib/commitments';
 import { LiveCommitment } from '@/components/commitment/LiveCommitment';
-import { ConnectButton } from '@/components/ConnectButton';
 import { CHAIN_ID } from '@/lib/contract';
 
 export const dynamic = 'force-dynamic';
@@ -85,24 +84,6 @@ export default async function CommitmentPage({
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col px-6 py-8">
-      <header className="mb-8 flex items-center justify-between">
-        <Link
-          href="/"
-          prefetch
-          className="font-mono text-sm uppercase tracking-widest"
-        >
-          procrastinot
-        </Link>
-        <div className="flex items-center gap-3">
-          <Link href="/my" prefetch className="text-sm text-neutral-400 hover:text-neutral-100">
-            My
-          </Link>
-          <Link href="/inbox" prefetch className="text-sm text-neutral-400 hover:text-neutral-100">
-            Inbox
-          </Link>
-          <ConnectButton />
-        </div>
-      </header>
       {children}
     </main>
   );

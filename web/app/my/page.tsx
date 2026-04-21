@@ -21,28 +21,6 @@ export default async function MyPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col px-6 py-8">
-      <header className="mb-8 flex items-center justify-between">
-        <Link
-          href="/"
-          prefetch
-          className="font-mono text-sm uppercase tracking-widest"
-        >
-          procrastinot
-        </Link>
-        <nav className="flex items-center gap-4 text-sm text-neutral-400">
-          <Link href="/inbox" prefetch className="hover:text-neutral-100">
-            Inbox
-          </Link>
-          <Link
-            href="/create"
-            prefetch
-            className="rounded bg-neutral-100 px-3 py-1.5 font-medium text-neutral-950 hover:bg-white"
-          >
-            New
-          </Link>
-        </nav>
-      </header>
-
       <h1 className="mb-6 text-2xl font-semibold">My commitments</h1>
 
       {commitments.length === 0 ? (

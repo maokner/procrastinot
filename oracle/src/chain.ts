@@ -134,8 +134,17 @@ export async function getCommitment(
   return normalizeCommitment(result);
 }
 
+const SUBMIT_VERDICT_RECEIPT_TIMEOUT_MS = 120_000;
+
 /**
- * Submit a verdict on-chain. Returns the tx hash (not awaited to mined).
+ * Submit a verdict on-chain and wait for the receipt.
+ *
+ * Returns the tx hash only after `waitForTransactionReceipt` resolves, so
+ * callers can treat a successful return as "the tx actually landed". If the
+ * receipt doesn't arrive within {@link SUBMIT_VERDICT_RECEIPT_TIMEOUT_MS} the
+ * wait throws — the poller treats that as transient and leaves the verdict
+ * `pending` so a subsequent tick observes the settled state.
+ *
  * Caller is responsible for SQLite idempotency and for pre-flighting the
  * on-chain status to avoid wasted gas.
  */
@@ -150,6 +159,10 @@ export async function submitVerdict(
     args: [args.commitmentId, args.passed, args.reasonHash],
     account: clients.account,
     chain: clients.walletClient.chain,
+  });
+  await clients.publicClient.waitForTransactionReceipt({
+    hash,
+    timeout: SUBMIT_VERDICT_RECEIPT_TIMEOUT_MS,
   });
   return hash;
 }

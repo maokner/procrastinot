@@ -3,22 +3,35 @@
  *
  * Body: { message: string, signature: string }
  *
- * - Requires an authenticated Supabase session.
- * - Verifies the SIWE signature against the nonce we issued for this user
- *   (single-use; popped from the in-process store).
- * - Enforces chainId === 11155111 (Sepolia).
- * - Uses the service-role Supabase client to upsert the verified wallet row
- *   (RLS blocks user-level writes by design).
+ * Wallet-first sign-in entry point.
+ *
+ * - Verifies the SIWE signature pre-auth against the nonce we issued for the
+ *   connected wallet address.
+ * - Finds or creates the matching auth user + public profile + wallet row.
+ * - Mints a real Supabase session via admin.generateLink(...magiclink) and
+ *   auth.verifyOtp({ token_hash, type: 'magiclink' }), so the browser gets
+ *   both access + refresh tokens in the standard SSR auth cookies.
+ * - Returns { needsUsername } so the client can route to /onboarding or /my.
  */
+import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
-import { cookies } from 'next/headers';
 import { SiweMessage } from 'siwe';
-import { supabaseServer, supabaseService } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { siteHost } from '@/lib/env';
 import { popNonce } from '../nonce/store';
 
 export const runtime = 'nodejs';
 
 const EXPECTED_CHAIN_ID = 11155111;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+type WalletLookup = { profile_id: string };
+type ProfileUsernameRow = { username: string | null };
+
+function walletEmail(address: string): string {
+  return `${address.toLowerCase()}@wallet.procrastinot.local`;
+}
 
 export async function POST(request: NextRequest) {
   let body: { message?: unknown; signature?: unknown };
@@ -32,22 +45,6 @@ export async function POST(request: NextRequest) {
   if (typeof message !== 'string' || typeof signature !== 'string') {
     return NextResponse.json(
       { error: 'message and signature are required strings' },
-      { status: 400 },
-    );
-  }
-
-  const cookieJar = await cookies();
-  const supabase = supabaseServer(cookieJar);
-  const { data: userData, error: userErr } = await supabase.auth.getUser();
-  if (userErr || !userData.user) {
-    return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
-  }
-  const userId = userData.user.id;
-
-  const expectedNonce = popNonce(userId);
-  if (!expectedNonce) {
-    return NextResponse.json(
-      { error: 'no nonce issued or nonce expired — request a new one' },
       { status: 400 },
     );
   }
@@ -66,10 +63,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Verify signature + nonce + domain. We trust the Host header from the
-  // proxy for domain matching; in production set a trusted proxy / use
-  // NEXT_PUBLIC_SITE_URL.
-  const domain = request.headers.get('host') ?? undefined;
+  const address = siwe.address.toLowerCase();
+  const expectedNonce = popNonce(address);
+  if (!expectedNonce) {
+    return NextResponse.json(
+      { error: 'no nonce issued or nonce expired — request a new one' },
+      { status: 400 },
+    );
+  }
+
+  const domain = siteHost() ?? request.headers.get('host') ?? undefined;
   let ok = false;
   try {
     const result = await siwe.verify({ signature, nonce: expectedNonce, domain });
@@ -81,46 +84,141 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'signature verification failed' }, { status: 401 });
   }
 
-  const address = siwe.address.toLowerCase();
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return NextResponse.json({ error: 'supabase env missing' }, { status: 500 });
+  }
 
-  // Use the service-role client to upsert into `wallets`. RLS would otherwise
-  // block the write — only verified SIWE flows (this route) may touch it.
-  const svc = supabaseService();
-
-  // Collision check: is this address already linked to a DIFFERENT profile?
-  const { data: existing, error: selErr } = await svc
+  const admin = supabaseAdmin();
+  const { data: existingWalletRaw, error: walletErr } = await admin
     .from('wallets')
     .select('profile_id')
     .eq('address', address)
     .eq('chain_id', EXPECTED_CHAIN_ID)
     .maybeSingle();
-  if (selErr) {
+  if (walletErr) {
     return NextResponse.json({ error: 'db error' }, { status: 500 });
   }
-  const existingRow = existing as { profile_id: string } | null;
-  if (existingRow && existingRow.profile_id !== userId) {
-    return NextResponse.json(
-      { error: 'wallet already linked to another account' },
-      { status: 409 },
+  const existingWallet = existingWalletRaw as WalletLookup | null;
+
+  let userId: string;
+  let email: string;
+  let needsUsername = true;
+
+  if (existingWallet?.profile_id) {
+    userId = existingWallet.profile_id;
+
+    const [{ data: authUserData, error: authUserErr }, { data: profile, error: profileErr }] =
+      await Promise.all([
+        admin.auth.admin.getUserById(userId),
+        admin.from('profiles').select('username').eq('id', userId).maybeSingle(),
+      ]);
+
+    if (authUserErr || !authUserData.user?.email) {
+      return NextResponse.json({ error: 'failed to load wallet user' }, { status: 500 });
+    }
+    if (profileErr) {
+      return NextResponse.json({ error: 'failed to load profile' }, { status: 500 });
+    }
+
+    email = authUserData.user.email;
+    needsUsername = !(profile as ProfileUsernameRow | null)?.username;
+  } else {
+    email = walletEmail(address);
+
+    const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+      type: 'magiclink',
+      email,
+      options: {
+        data: {
+          wallet_address: address,
+          auth_method: 'siwe',
+        },
+      },
+    });
+    if (linkErr || !linkData.user || !linkData.properties?.hashed_token) {
+      return NextResponse.json({ error: 'failed to provision wallet user' }, { status: 500 });
+    }
+
+    userId = linkData.user.id;
+
+    // Ensure the public app tables exist before the session is returned.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: profileErr } = await (admin.from('profiles') as any).upsert(
+      {
+        id: userId,
+        username: null,
+        display_name: null,
+        avatar_url: null,
+      },
+      { onConflict: 'id' },
     );
+    if (profileErr) {
+      return NextResponse.json({ error: 'failed to save profile' }, { status: 500 });
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: walletInsertErr } = await (admin.from('wallets') as any).insert({
+      profile_id: userId,
+      address,
+      chain_id: EXPECTED_CHAIN_ID,
+      verified_at: new Date().toISOString(),
+    });
+    if (walletInsertErr) {
+      return NextResponse.json({ error: 'failed to save wallet' }, { status: 500 });
+    }
+
+    const response = NextResponse.json({ needsUsername: true });
+    const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options);
+          });
+        },
+      },
+    });
+    const { error: verifyErr } = await supabase.auth.verifyOtp({
+      token_hash: linkData.properties.hashed_token,
+      type: 'magiclink',
+    });
+    if (verifyErr) {
+      return NextResponse.json({ error: 'failed to mint session' }, { status: 500 });
+    }
+
+    return response;
   }
 
-  // Upsert by profile_id (the unique constraint): re-verifying the same user
-  // replaces their previous wallet row.
-  const walletRow = {
-    profile_id: userId,
-    address,
-    chain_id: EXPECTED_CHAIN_ID,
-    verified_at: new Date().toISOString(),
-  };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: upsertErr } = await (svc.from('wallets') as any).upsert(
-    walletRow,
-    { onConflict: 'profile_id' },
-  );
-  if (upsertErr) {
-    return NextResponse.json({ error: 'failed to save wallet' }, { status: 500 });
+  const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+    type: 'magiclink',
+    email,
+  });
+  if (linkErr || !linkData.properties?.hashed_token) {
+    return NextResponse.json({ error: 'failed to generate login link' }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true });
+  const response = NextResponse.json({ needsUsername });
+  const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value, options }) => {
+          response.cookies.set(name, value, options);
+        });
+      },
+    },
+  });
+  const { error: verifyErr } = await supabase.auth.verifyOtp({
+    token_hash: linkData.properties.hashed_token,
+    type: 'magiclink',
+  });
+  if (verifyErr) {
+    return NextResponse.json({ error: 'failed to mint session' }, { status: 500 });
+  }
+
+  return response;
 }

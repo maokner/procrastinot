@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { supabaseServer } from '@/lib/supabase';
@@ -30,12 +29,6 @@ export default async function PublicProfilePage({ params }: Props) {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col px-6 py-10">
-      <header className="mb-8 flex items-center justify-between">
-        <Link href="/" className="font-mono text-sm uppercase tracking-widest">
-          procrastinot
-        </Link>
-      </header>
-
       <section className="flex items-center gap-5">
         {data.avatar_url ? (
           // eslint-disable-next-line @next/next/no-img-element

@@ -1,5 +1,6 @@
 import type { VerdictEvent } from '@/lib/db-types';
 import { etherscanTxUrl } from '@/lib/format';
+import { EvidencePreview } from './EvidencePreview';
 
 function relative(iso: string): string {
   const then = new Date(iso).getTime();
@@ -53,11 +54,7 @@ export function VerdictLog({
               </a>
             </span>
           </div>
-          {ev.evidence_uri && (
-            <p className="mt-1 break-all font-mono text-xs text-neutral-400">
-              {ev.evidence_uri}
-            </p>
-          )}
+          {ev.evidence_uri && <EvidencePreview uri={ev.evidence_uri} />}
         </li>
       ))}
     </ul>

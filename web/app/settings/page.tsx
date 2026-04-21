@@ -12,17 +12,11 @@ export default async function SettingsPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col px-6 py-10">
-      <header className="mb-8 flex items-center justify-between">
-        <Link href="/" className="font-mono text-sm uppercase tracking-widest">
-          procrastinot
-        </Link>
-      </header>
-
       <h1 className="mb-8 text-3xl font-semibold tracking-tight">Settings</h1>
 
       <section className="flex flex-col gap-6">
         <Row label="Username">
-          <span className="font-mono">@{profile.username}</span>
+          <span className="font-mono">@{profile.username ?? 'pending'}</span>
         </Row>
 
         <Row label="Email">

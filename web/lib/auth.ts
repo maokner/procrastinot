@@ -41,6 +41,13 @@ export async function getProfile(
   return data as Profile | null;
 }
 
+/** Username-null profiles are signed in but not fully onboarded yet. */
+export function hasCompletedOnboarding(
+  profile: Pick<Profile, 'username'> | null,
+): boolean {
+  return Boolean(profile?.username);
+}
+
 /** Returns the user's verified wallet row or null. */
 export async function getWallet(
   cookieJar: CookieJar,
@@ -70,8 +77,9 @@ export async function requireSession(
 }
 
 /**
- * Redirects to /login if no session, to /onboarding if session but no profile.
- * Returns { user, profile } when both are present.
+ * Redirects to /login if no session, to /onboarding if session but onboarding
+ * is incomplete. Returns { user, profile } when both are present and the user
+ * has chosen a username.
  */
 export async function requireProfile(
   cookieJar: CookieJar,
@@ -79,6 +87,6 @@ export async function requireProfile(
 ): Promise<{ user: User; profile: Profile }> {
   const user = await requireSession(cookieJar, next);
   const profile = await getProfile(cookieJar, user.id);
-  if (!profile) redirect('/onboarding');
+  if (!profile || !hasCompletedOnboarding(profile)) redirect('/onboarding');
   return { user, profile };
 }
