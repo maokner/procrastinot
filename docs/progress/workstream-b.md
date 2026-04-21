@@ -6,7 +6,7 @@
 
 ## Checklist
 
-- [ ] B1 — Create `web/components/layout/AppHeader.tsx` (server component)
+- [x] B1 — Create `web/components/layout/AppHeader.tsx` (server component)
 - [ ] B2 — Create `web/components/layout/SessionMenu.tsx` (client component)
 - [ ] B3 — Mount `<AppHeader />` in `web/app/layout.tsx`
 - [ ] B4 — Delete `SignOutButton.tsx`; remove duplicate button from `settings/page.tsx`
@@ -20,4 +20,4 @@
 
 ## Next action on resume
 
-Implement B1: create `web/components/layout/AppHeader.tsx` as a server component that reuses `getSession`, `getProfile`, `getWallet` from `web/lib/auth.ts`.
+B1 done. Next: mark B2 off — `SessionMenu.tsx` is already written alongside AppHeader (required for AppHeader to compile). Just need the progress tick + commit.
