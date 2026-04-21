@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { Suspense } from 'react';
+import Link from 'next/link';
 import { getSession, getProfile, hasCompletedOnboarding } from '@/lib/auth';
 import { SiweButton } from '@/components/auth/SiweButton';
 
@@ -27,16 +28,20 @@ export default async function LoginPage({
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col px-6 py-10">
-      <h1 className="mb-2 text-3xl font-semibold tracking-tight">Connect your wallet</h1>
-      <p className="mb-8 text-sm text-neutral-400">
+    <main className="pn-page max-w-2xl">
+      <Link href="/" className="pn-backlink mb-6">← Back to home</Link>
+      <p className="pn-kicker mb-3">Access</p>
+      <h1 className="pn-title mb-3 text-5xl">Connect your wallet</h1>
+      <p className="pn-copy mb-8 max-w-xl text-base">
         Procrastinot is passwordless now. Connect the wallet you&apos;ll stake from,
         sign the SIWE message, and we&apos;ll either send you to onboarding or straight
         into the app.
       </p>
-      <Suspense fallback={null}>
-        <SiweButton nextPath={next} />
-      </Suspense>
+      <section className="pn-panel rounded-2xl p-5">
+        <Suspense fallback={null}>
+          <SiweButton nextPath={next} />
+        </Suspense>
+      </section>
     </main>
   );
 }

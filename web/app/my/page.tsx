@@ -20,20 +20,25 @@ export default async function MyPage() {
   ]);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col px-6 py-8">
-      <h1 className="mb-6 text-2xl font-semibold">My commitments</h1>
+    <main className="pn-page max-w-5xl">
+      <Link href="/" className="pn-backlink mb-5">← Back to home</Link>
+      <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="pn-kicker mb-2">Workspace</p>
+          <h1 className="pn-title text-5xl">My commitments</h1>
+        </div>
+        <Link href="/create" prefetch className="pn-btn pn-btn-primary">
+          New commitment
+        </Link>
+      </div>
 
       {commitments.length === 0 ? (
-        <div className="flex flex-col items-start gap-3">
-          <p className="text-neutral-400">No commitments yet.</p>
-          <Link
-            href="/create"
-            prefetch
-            className="rounded bg-neutral-100 px-4 py-2 text-neutral-950 hover:bg-white"
-          >
+        <section className="pn-panel rounded-2xl p-6">
+          <p className="pn-copy mb-4">No commitments yet.</p>
+          <Link href="/create" prefetch className="pn-btn pn-btn-primary">
             Create one
           </Link>
-        </div>
+        </section>
       ) : (
         <ul className="flex flex-col gap-3">
           {commitments.map((c) => {

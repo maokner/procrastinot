@@ -12,8 +12,8 @@ export function ConnectGate({ children }: { children: ReactNode }) {
 
   if (!isConnected) {
     return (
-      <div className="flex flex-col items-start gap-4 rounded-lg border border-neutral-800 bg-neutral-950 p-6">
-        <p className="text-neutral-300">Connect your wallet to continue.</p>
+      <div className="pn-panel flex flex-col items-start gap-4 rounded-2xl p-6">
+        <p className="text-[var(--ink-1)]">Connect your wallet to continue.</p>
         <ConnectButton />
       </div>
     );
@@ -21,13 +21,13 @@ export function ConnectGate({ children }: { children: ReactNode }) {
 
   if (chainId !== sepolia.id) {
     return (
-      <div className="flex flex-col items-start gap-4 rounded-lg border border-red-900 bg-neutral-950 p-6">
-        <p className="text-red-400">Wrong network. Procrastinot runs on Sepolia.</p>
+      <div className="pn-panel flex flex-col items-start gap-4 rounded-2xl p-6">
+        <p className="text-[var(--danger)]">Wrong network. Procrastinot runs on Sepolia.</p>
         <button
           type="button"
           onClick={() => switchChain({ chainId: sepolia.id })}
           disabled={isPending}
-          className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-900 disabled:opacity-50"
+          className="pn-btn pn-btn-secondary text-sm"
         >
           {isPending ? 'Switching…' : 'Switch to Sepolia'}
         </button>

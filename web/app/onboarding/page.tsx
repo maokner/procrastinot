@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
+import Link from 'next/link';
 import { getProfile, hasCompletedOnboarding, requireSession } from '@/lib/auth';
 import { OnboardingClient } from '@/components/auth/OnboardingClient';
 
@@ -13,13 +14,17 @@ export default async function OnboardingPage() {
   if (hasCompletedOnboarding(profile)) redirect('/my');
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col px-6 py-10">
-      <h1 className="mb-2 text-3xl font-semibold tracking-tight">Choose your username</h1>
-      <p className="mb-8 text-sm text-neutral-400">
+    <main className="pn-page max-w-2xl">
+      <Link href="/login" className="pn-backlink mb-6">← Back to login</Link>
+      <p className="pn-kicker mb-3">Profile Setup</p>
+      <h1 className="pn-title mb-3 text-5xl">Choose your username</h1>
+      <p className="pn-copy mb-8 max-w-xl text-base">
         Your wallet is already verified. Pick the public handle other players
         will see, then you&apos;ll land in your dashboard.
       </p>
-      <OnboardingClient userId={user.id} initialUsername={profile?.username ?? null} />
+      <section className="pn-panel rounded-2xl p-5">
+        <OnboardingClient userId={user.id} initialUsername={profile?.username ?? null} />
+      </section>
     </main>
   );
 }

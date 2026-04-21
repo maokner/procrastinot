@@ -36,10 +36,10 @@ export function supabaseServer(cookieJar: CookieJar): SupabaseClient<Database> {
         return cookieJar.get(name)?.value;
       },
       set(name: string, value: string, options: CookieOptions) {
-        cookieJar.set?.({ name, value, ...options });
+        trySetCookie(cookieJar, { name, value, ...options });
       },
       remove(name: string, options: CookieOptions) {
-        cookieJar.set?.({ name, value: '', ...options });
+        trySetCookie(cookieJar, { name, value: '', ...options });
       },
     },
   });
@@ -70,3 +70,16 @@ type CookieJar = {
   get(name: string): { value: string } | undefined;
   set?: (opts: { name: string; value: string } & CookieOptions) => void;
 };
+
+function trySetCookie(
+  cookieJar: CookieJar,
+  opts: { name: string; value: string } & CookieOptions,
+) {
+  if (!cookieJar.set) return;
+  try {
+    cookieJar.set(opts);
+  } catch {
+    // In Server Component render contexts Next exposes a read-only cookie store.
+    // Route Handlers / Server Actions can still write successfully.
+  }
+}

@@ -59,8 +59,8 @@ export function ForfeitOrClaimButton({
   const busy = writing || rx.isLoading;
   const base =
     variant === 'forfeit'
-      ? 'border border-red-800 bg-red-950/40 text-red-200 hover:bg-red-950'
-      : 'bg-green-600 text-white hover:bg-green-500';
+      ? 'pn-btn pn-btn-danger'
+      : 'pn-btn pn-btn-success';
 
   return (
     <div className="flex flex-col items-start gap-2">
@@ -68,12 +68,12 @@ export function ForfeitOrClaimButton({
         type="button"
         onClick={go}
         disabled={disabled || busy}
-        className={`rounded px-4 py-2 font-medium disabled:opacity-50 ${base}`}
+        className={`${base}`}
       >
         {busy ? (rx.isLoading ? 'Confirming…' : 'Signing…') : label}
       </button>
       {err && (
-        <p className="rounded border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+        <p className="rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--line))] bg-[color-mix(in_srgb,var(--danger)_10%,white)] p-3 text-sm text-[var(--danger)]">
           {err}
         </p>
       )}
@@ -82,7 +82,7 @@ export function ForfeitOrClaimButton({
           href={etherscanTxUrl(txHash, CHAIN_ID)}
           target="_blank"
           rel="noreferrer"
-          className="text-xs text-neutral-400 underline"
+          className="text-xs text-[var(--ink-2)] underline"
         >
           {rx.isSuccess ? '✓ confirmed' : '… confirming'} (etherscan)
         </a>

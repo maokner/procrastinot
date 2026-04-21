@@ -82,7 +82,7 @@ export function InboxList({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex gap-2 border-b border-neutral-800 text-sm">
+      <div className="flex gap-2 border-b border-[var(--line)] text-sm">
         <TabButton selected={tab === 'active'} onClick={() => setTab('active')}>
           Active ({active.length})
         </TabButton>
@@ -92,7 +92,7 @@ export function InboxList({
       </div>
 
       {rows.length === 0 ? (
-        <p className="text-neutral-500">
+        <p className="text-[var(--ink-2)]">
           {tab === 'active'
             ? 'No one has put you on the hook yet.'
             : 'No past commitments.'}
@@ -133,8 +133,8 @@ function TabButton({
       onClick={onClick}
       className={`-mb-px border-b-2 px-3 py-2 text-sm ${
         selected
-          ? 'border-neutral-100 text-neutral-100'
-          : 'border-transparent text-neutral-500 hover:text-neutral-300'
+          ? 'border-[var(--accent)] text-[var(--ink-0)]'
+          : 'border-transparent text-[var(--ink-2)] hover:text-[var(--ink-0)]'
       }`}
     >
       {children}
@@ -160,7 +160,7 @@ function InboxRow({
   const canClaim = commitment.status === 'active' && now >= deadlineSec;
 
   return (
-    <li className="flex flex-col gap-3 rounded border border-neutral-800 bg-neutral-950 p-4">
+    <li className="flex flex-col gap-3 border-b border-[var(--line)] py-4 last:border-none">
       <div className="flex items-center justify-between">
         <Link
           href={`/c/${commitment.id}`}
@@ -169,10 +169,10 @@ function InboxRow({
         >
           #{commitment.id}
         </Link>
-        <span className="text-xs text-neutral-500">
+        <span className="text-xs text-[var(--ink-2)]">
           from{' '}
           {creatorUsername ? (
-            <span className="text-neutral-200">@{creatorUsername}</span>
+            <span className="text-[var(--ink-1)]">@{creatorUsername}</span>
           ) : (
             <span className="font-mono">
               {commitment.creator_address.slice(0, 6)}…
@@ -181,15 +181,15 @@ function InboxRow({
           )}
         </span>
       </div>
-      <p className="line-clamp-2 text-sm text-neutral-300">{commitment.task}</p>
+      <p className="line-clamp-2 text-sm text-[var(--ink-1)]">{commitment.task}</p>
       <div className="flex items-center justify-between">
-        <span className="text-xs text-neutral-400">
+        <span className="text-xs text-[var(--ink-2)]">
           {commitment.status === 'active' ? (
             <>
               <DeadlineCountdown
                 deadline={commitment.deadline}
                 onExpire={onExpire}
-                className="text-neutral-300"
+                className="text-[var(--ink-1)]"
               />{' '}
               until claimable
             </>

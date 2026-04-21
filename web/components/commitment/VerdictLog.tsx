@@ -31,24 +31,24 @@ export function VerdictLog({
   chainId?: number;
 }) {
   if (events.length === 0) {
-    return <p className="text-sm text-neutral-500">No attempts yet.</p>;
+    return <p className="text-sm text-[var(--ink-2)]">No attempts yet.</p>;
   }
   return (
     <ul className="flex flex-col gap-2 text-sm">
       {events.map((ev) => (
         <li
           key={ev.id}
-          className="rounded border border-neutral-800 bg-neutral-950 p-3"
+          className="rounded-xl border border-[var(--line)] bg-white/60 p-3"
         >
           <div className="flex items-center justify-between">
             <span className="font-medium">{labelFor(ev)}</span>
-            <span className="flex items-center gap-3 text-xs text-neutral-500">
+            <span className="flex items-center gap-3 text-xs text-[var(--ink-2)]">
               <span>{relative(ev.created_at)}</span>
               <a
                 href={etherscanTxUrl(ev.tx_hash, chainId)}
                 target="_blank"
                 rel="noreferrer"
-                className="underline hover:text-neutral-300"
+                className="underline hover:text-[var(--ink-0)]"
               >
                 tx
               </a>

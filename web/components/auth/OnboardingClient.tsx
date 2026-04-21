@@ -58,11 +58,11 @@ export function OnboardingClient({
         onChange={setUsername}
         onStatusChange={setStatus}
       />
-      {err ? <p className="text-sm text-red-400">{err}</p> : null}
+      {err ? <p className="text-sm text-[var(--danger)]">{err}</p> : null}
       <button
         type="submit"
         disabled={submitting || status !== 'available'}
-        className="w-fit rounded bg-neutral-100 px-4 py-2 font-medium text-neutral-950 hover:bg-white disabled:opacity-50"
+        className="pn-btn pn-btn-primary w-fit"
       >
         {submitting ? 'Saving…' : 'Continue to my commitments'}
       </button>

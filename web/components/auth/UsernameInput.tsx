@@ -77,11 +77,11 @@ export function UsernameInput({
 
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor="username" className="text-sm text-neutral-400">
+      <label htmlFor="username" className="text-sm text-[var(--ink-1)]">
         Pick a username
       </label>
-      <div className="flex items-center rounded border border-neutral-800 bg-neutral-950 focus-within:border-neutral-600">
-        <span className="pl-3 text-neutral-500">@</span>
+      <div className="flex items-center rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.7)] focus-within:border-[color-mix(in_srgb,var(--accent)_55%,var(--line))]">
+        <span className="pl-3 text-[var(--ink-2)]">@</span>
         <input
           id="username"
           name="username"
@@ -91,13 +91,13 @@ export function UsernameInput({
           value={value}
           onChange={(e) => onChange(e.target.value.toLowerCase())}
           placeholder="your_handle"
-          className="w-full bg-transparent px-2 py-2 text-neutral-100 outline-none"
+          className="w-full bg-transparent px-2 py-2 text-[var(--ink-0)] outline-none"
         />
       </div>
       {message ? (
         <p
           className={`text-xs ${
-            status === 'available' ? 'text-emerald-400' : 'text-neutral-500'
+            status === 'available' ? 'text-[var(--success)]' : 'text-[var(--ink-2)]'
           }`}
         >
           {message}

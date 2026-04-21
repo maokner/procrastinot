@@ -90,16 +90,16 @@ export function EvidencePreview({ uri }: { uri: string }) {
 
   return (
     <div className="mt-2 flex flex-col gap-2">
-      <p className="break-all font-mono text-xs text-neutral-400">{displayUri(uri)}</p>
+      <p className="break-all font-mono text-xs text-[var(--ink-2)]">{displayUri(uri)}</p>
 
       {preview.kind === 'loading' && (
-        <p className="text-xs text-neutral-500">Loading evidence preview…</p>
+        <p className="text-xs text-[var(--ink-2)]">Loading evidence preview…</p>
       )}
 
       {preview.kind === 'manifest' && (
         <>
           {preview.manifest.note && (
-            <p className="rounded border border-neutral-800 bg-neutral-900/60 p-2 text-xs text-neutral-300">
+            <p className="rounded-xl border border-[var(--line)] bg-white/60 p-2 text-xs text-[var(--ink-1)]">
               {preview.manifest.note}
             </p>
           )}
@@ -110,7 +110,7 @@ export function EvidencePreview({ uri }: { uri: string }) {
                 href={url}
                 target="_blank"
                 rel="noreferrer"
-                className="overflow-hidden rounded border border-neutral-800 bg-neutral-900"
+                className="overflow-hidden rounded-xl border border-[var(--line)] bg-white/70"
               >
                 {/* Plain img keeps remote storage URLs simple; no next/image domain config required. */}
                 <img
@@ -130,7 +130,7 @@ export function EvidencePreview({ uri }: { uri: string }) {
           href={preview.url}
           target="_blank"
           rel="noreferrer"
-          className="max-w-48 overflow-hidden rounded border border-neutral-800 bg-neutral-900"
+          className="max-w-48 overflow-hidden rounded-xl border border-[var(--line)] bg-white/70"
         >
           <img
             src={preview.url}
@@ -142,7 +142,7 @@ export function EvidencePreview({ uri }: { uri: string }) {
       )}
 
       {preview.kind === 'error' && (
-        <p className="text-xs text-amber-300">
+        <p className="text-xs text-[var(--danger)]">
           Preview unavailable: {preview.message}
         </p>
       )}

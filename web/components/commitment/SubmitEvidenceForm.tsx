@@ -269,16 +269,16 @@ export function SubmitEvidenceForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="flex flex-col gap-4 rounded border border-neutral-800 bg-neutral-950 p-4"
+      className="pn-panel flex flex-col gap-4 rounded-2xl p-4"
     >
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
           onClick={() => setMode('photo')}
-          className={`rounded border px-3 py-2 text-sm font-medium ${
+          className={`pn-btn px-3 py-2 text-sm font-medium ${
             mode === 'photo'
-              ? 'border-neutral-200 bg-neutral-100 text-neutral-950'
-              : 'border-neutral-800 bg-neutral-900 text-neutral-300 hover:bg-neutral-800'
+              ? 'pn-btn-primary'
+              : 'pn-btn-secondary'
           }`}
         >
           Photo
@@ -286,10 +286,10 @@ export function SubmitEvidenceForm({
         <button
           type="button"
           onClick={() => setMode('text')}
-          className={`rounded border px-3 py-2 text-sm font-medium ${
+          className={`pn-btn px-3 py-2 text-sm font-medium ${
             mode === 'text'
-              ? 'border-neutral-200 bg-neutral-100 text-neutral-950'
-              : 'border-neutral-800 bg-neutral-900 text-neutral-300 hover:bg-neutral-800'
+              ? 'pn-btn-primary'
+              : 'pn-btn-secondary'
           }`}
         >
           Link / text
@@ -314,24 +314,24 @@ export function SubmitEvidenceForm({
             }}
             onDragLeave={() => setDragging(false)}
             onDrop={onDropFiles}
-            className={`rounded border border-dashed p-5 text-sm transition ${
+            className={`rounded-xl border border-dashed p-5 text-sm transition ${
               dragging
-                ? 'border-neutral-300 bg-neutral-900'
-                : 'border-neutral-700 bg-neutral-900/60'
+                ? 'border-[var(--accent)] bg-[var(--accent-soft)]/45'
+                : 'border-[var(--line)] bg-white/65'
             }`}
           >
             <div className="flex flex-col gap-2">
-              <p className="font-medium text-neutral-100">
+              <p className="font-medium text-[var(--ink-0)]">
                 Drag in up to {MAX_FILES} photos, or pick them manually.
               </p>
-              <p className="text-neutral-400">
+              <p className="text-[var(--ink-2)]">
                 Accepted: JPEG, PNG, WebP, HEIC. Images are resized to a 2048px max edge when the browser can decode them.
               </p>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => pickerRef.current?.click()}
-                  className="rounded border border-neutral-700 px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-800"
+                  className="pn-btn pn-btn-secondary text-sm"
                 >
                   Choose photos
                 </button>
@@ -340,7 +340,7 @@ export function SubmitEvidenceForm({
                     type="button"
                     onClick={() => setUploads([])}
                     disabled={busy}
-                    className="rounded border border-neutral-800 px-3 py-2 text-sm text-neutral-400 hover:bg-neutral-900 disabled:opacity-50"
+                    className="pn-btn pn-btn-secondary text-sm"
                   >
                     Clear
                   </button>
@@ -350,18 +350,18 @@ export function SubmitEvidenceForm({
           </div>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm text-neutral-300">Optional note</span>
+            <span className="text-sm text-[var(--ink-1)]">Optional note</span>
             <textarea
               value={photoNote}
               onChange={(e) => setPhotoNote(e.target.value)}
               rows={3}
               placeholder="What should the oracle notice in these photos?"
-              className="rounded border border-neutral-800 bg-neutral-900 p-3 text-neutral-100"
+              className="pn-textarea"
             />
           </label>
 
           {!viewerProfileId && (
-            <p className="rounded border border-amber-900 bg-amber-950/40 p-3 text-sm text-amber-200">
+            <p className="rounded-xl border border-[color-mix(in_srgb,var(--accent)_35%,var(--line))] bg-[var(--accent-soft)]/60 p-3 text-sm text-[var(--ink-1)]">
               Photo uploads need a live Supabase session because Storage RLS keys uploads off `auth.uid()`. If you only have a connected wallet, switch to Link / text.
             </p>
           )}
@@ -371,14 +371,14 @@ export function SubmitEvidenceForm({
               {uploads.map((upload) => (
                 <li
                   key={upload.id}
-                  className="rounded border border-neutral-800 bg-neutral-900/70 p-3"
+                  className="rounded-xl border border-[var(--line)] bg-white/60 p-3"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-neutral-100">
+                      <p className="truncate text-sm font-medium text-[var(--ink-0)]">
                         {upload.file.name}
                       </p>
-                      <p className="text-xs text-neutral-400">
+                      <p className="text-xs text-[var(--ink-2)]">
                         {(upload.file.size / 1024 / 1024).toFixed(2)} MB
                       </p>
                     </div>
@@ -388,26 +388,26 @@ export function SubmitEvidenceForm({
                         setUploads((prev) => prev.filter((item) => item.id !== upload.id))
                       }
                       disabled={busy}
-                      className="text-xs text-neutral-500 hover:text-neutral-200 disabled:opacity-50"
+                      className="text-xs text-[var(--ink-2)] underline hover:text-[var(--ink-0)] disabled:opacity-50"
                     >
                       Remove
                     </button>
                   </div>
-                  <div className="mt-2 h-2 overflow-hidden rounded bg-neutral-800">
+                  <div className="mt-2 h-2 overflow-hidden rounded bg-[var(--line)]">
                     <div
                       className={`h-full transition-all ${
                         upload.stage === 'error'
-                          ? 'bg-red-500'
+                          ? 'bg-[var(--danger)]'
                           : upload.stage === 'uploaded'
-                            ? 'bg-emerald-500'
-                            : 'bg-neutral-200'
+                            ? 'bg-[var(--success)]'
+                            : 'bg-[var(--ink-1)]'
                       }`}
                       style={{ width: `${upload.progress}%` }}
                     />
                   </div>
                   <p
                     className={`mt-2 text-xs ${
-                      upload.stage === 'error' ? 'text-red-300' : 'text-neutral-400'
+                      upload.stage === 'error' ? 'text-[var(--danger)]' : 'text-[var(--ink-2)]'
                     }`}
                   >
                     {stageLabel(upload)}
@@ -419,13 +419,13 @@ export function SubmitEvidenceForm({
         </>
       ) : (
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm text-neutral-300">Evidence</span>
+          <span className="text-sm text-[var(--ink-1)]">Evidence</span>
           <textarea
             value={textEvidence}
             onChange={(e) => setTextEvidence(e.target.value)}
             rows={3}
             placeholder="Paste text, a URL, or ipfs://…"
-            className="rounded border border-neutral-800 bg-neutral-900 p-3 text-neutral-100"
+            className="pn-textarea"
           />
         </label>
       )}
@@ -433,7 +433,7 @@ export function SubmitEvidenceForm({
       <button
         type="submit"
         disabled={busy}
-        className="self-start rounded bg-neutral-100 px-4 py-2 font-medium text-neutral-950 hover:bg-white disabled:opacity-50"
+        className="pn-btn pn-btn-primary self-start"
       >
         {uploading
           ? 'Uploading photos…'
@@ -447,19 +447,19 @@ export function SubmitEvidenceForm({
       </button>
 
       {err && (
-        <p className="rounded border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+        <p className="rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--line))] bg-[color-mix(in_srgb,var(--danger)_10%,white)] p-3 text-sm text-[var(--danger)]">
           {err}
         </p>
       )}
 
       {txHash && (
-        <div className="flex items-center justify-between rounded border border-neutral-800 bg-neutral-950 p-3 text-sm">
+        <div className="flex items-center justify-between rounded-xl border border-[var(--line)] bg-white/60 p-3 text-sm">
           <span>{rx.isSuccess ? '✓ submitted' : '… submitting'}</span>
           <a
             href={etherscanTxUrl(txHash, CHAIN_ID)}
             target="_blank"
             rel="noreferrer"
-            className="text-xs text-neutral-400 underline"
+            className="text-xs text-[var(--ink-2)] underline"
           >
             etherscan
           </a>

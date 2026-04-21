@@ -70,7 +70,7 @@ export function ConnectButton() {
             type="button"
             onClick={() => injected && connect({ connector: injected })}
             disabled={connecting || !injected}
-            className="rounded bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 hover:bg-white disabled:opacity-60"
+            className="pn-btn pn-btn-primary text-sm"
           >
             {connecting ? 'Connecting…' : 'Connect wallet'}
           </button>
@@ -83,7 +83,7 @@ export function ConnectButton() {
                 if (c) connect({ connector: c });
               }}
               disabled={wcLoading || connecting}
-              className="rounded border border-neutral-700 px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-900 disabled:opacity-50"
+              className="pn-btn pn-btn-secondary px-3 py-2 text-xs"
               title="WalletConnect (mobile / QR)"
             >
               {wcLoading ? 'Loading…' : 'More'}
@@ -91,7 +91,7 @@ export function ConnectButton() {
           )}
         </div>
         {connectError && (
-          <span className="text-xs text-red-400">{connectError.message}</span>
+          <span className="text-xs text-[var(--danger)]">{connectError.message}</span>
         )}
       </div>
     );
@@ -104,7 +104,7 @@ export function ConnectButton() {
         type="button"
         onClick={() => switchChain({ chainId: sepolia.id })}
         disabled={switching}
-        className="rounded border border-red-800 bg-red-950/40 px-4 py-2 text-sm font-medium text-red-200 hover:bg-red-950 disabled:opacity-60"
+        className="pn-btn pn-btn-danger text-sm"
       >
         {switching ? 'Switching…' : 'Switch to Sepolia'}
       </button>
@@ -117,23 +117,23 @@ export function ConnectButton() {
       <button
         type="button"
         onClick={() => setMenuOpen((v) => !v)}
-        className="flex items-center gap-2 rounded border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm font-mono hover:bg-neutral-900"
+        className="pn-btn pn-btn-secondary flex items-center gap-2 px-3 py-2 text-sm font-mono"
       >
-        <span className="inline-block h-2 w-2 rounded-full bg-green-400" />
+        <span className="inline-block h-2 w-2 rounded-full bg-[var(--success)]" />
         {address ? shorten(address) : ''}
         <svg width="10" height="10" viewBox="0 0 12 12" className="opacity-60">
           <path fill="currentColor" d="M2 4 L6 8 L10 4 Z" />
         </svg>
       </button>
       {menuOpen && (
-        <div className="absolute right-0 mt-2 w-48 rounded border border-neutral-800 bg-neutral-950 py-1 text-sm shadow-lg">
+        <div className="absolute right-0 mt-2 w-48 rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,0.96)] py-1 text-sm shadow-lg">
           <button
             type="button"
             onClick={() => {
               disconnect();
               setMenuOpen(false);
             }}
-            className="block w-full px-3 py-2 text-left hover:bg-neutral-900"
+            className="block w-full rounded-xl px-3 py-2 text-left hover:bg-[var(--accent-soft)]"
           >
             Disconnect
           </button>

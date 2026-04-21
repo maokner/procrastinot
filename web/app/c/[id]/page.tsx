@@ -24,7 +24,7 @@ export default async function CommitmentPage({
   } catch {
     return (
       <Shell>
-        <p className="text-red-400">Invalid commitment id.</p>
+        <p className="text-[var(--danger)]">Invalid commitment id.</p>
       </Shell>
     );
   }
@@ -39,14 +39,14 @@ export default async function CommitmentPage({
       <Shell>
         <div className="flex flex-col items-start gap-3">
           <h1 className="text-xl font-semibold">Indexing…</h1>
-          <p className="text-sm text-neutral-400">
+          <p className="text-sm text-[var(--ink-2)]">
             This commitment hasn&apos;t landed in the database yet. The indexer
             typically catches up within 5&nbsp;seconds.
           </p>
           <Link
             href={`/c/${id}`}
             prefetch={false}
-            className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-900"
+            className="pn-btn pn-btn-secondary text-sm"
           >
             Retry
           </Link>
@@ -83,7 +83,8 @@ export default async function CommitmentPage({
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col px-6 py-8">
+    <main className="pn-page max-w-4xl">
+      <Link href="/my" className="pn-backlink mb-5">← Back to my commitments</Link>
       {children}
     </main>
   );

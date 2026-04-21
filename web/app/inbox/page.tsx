@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import {
   getViewerProfile,
   listInboxActive,
@@ -29,9 +30,10 @@ export default async function InboxPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col px-6 py-8">
-      <h1 className="mb-2 text-2xl font-semibold">Inbox</h1>
-      <p className="mb-6 text-sm text-neutral-500">
+    <main className="pn-page max-w-5xl">
+      <Link href="/my" className="pn-backlink mb-5">← Back to my commitments</Link>
+      <h1 className="pn-title mb-2 text-5xl">Inbox</h1>
+      <p className="pn-copy mb-7 max-w-xl">
         Commitments where you&apos;re the enemy. Past the deadline, you can
         claim the stake.
       </p>

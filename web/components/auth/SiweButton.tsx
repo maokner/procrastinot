@@ -140,26 +140,26 @@ export function SiweButton({
           type="button"
           onClick={handleConnect}
           disabled={connectPending}
-          className="w-fit rounded bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 hover:bg-white disabled:opacity-50"
+          className="pn-btn pn-btn-primary w-fit text-sm"
         >
           {connectPending ? 'Opening wallet…' : 'Connect wallet'}
         </button>
       ) : (
         <div className="flex flex-col gap-2">
-          <p className="font-mono text-xs text-neutral-400">
+          <p className="font-mono text-xs text-[var(--ink-2)]">
             Connected: {address}
           </p>
           <button
             type="button"
             onClick={handleVerify}
             disabled={busy || signPending}
-            className="w-fit rounded bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 hover:bg-white disabled:opacity-50"
+            className="pn-btn pn-btn-primary w-fit text-sm"
           >
             {busy || signPending ? 'Signing…' : 'Verify ownership'}
           </button>
         </div>
       )}
-      {err ? <p className="text-xs text-red-400">{err}</p> : null}
+      {err ? <p className="text-xs text-[var(--danger)]">{err}</p> : null}
     </div>
   );
 }

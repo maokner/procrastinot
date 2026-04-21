@@ -1,10 +1,19 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Fraunces, Manrope } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
 import { AppHeader } from '@/components/layout/AppHeader';
 
-const inter = Inter({ subsets: ['latin'], display: 'swap' });
+const manrope = Manrope({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-body',
+});
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-brand',
+});
 
 export const metadata: Metadata = {
   title: 'Procrastinot',
@@ -20,8 +29,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.className} min-h-screen bg-neutral-950 text-neutral-100`}>
+    <html lang="en">
+      <body className={`${manrope.variable} ${fraunces.variable} pn-body min-h-screen`}>
         <Providers>
           {/* AppHeader is a server component but lives inside Providers so
               SessionMenu's wagmi hooks have a WagmiProvider ancestor. */}

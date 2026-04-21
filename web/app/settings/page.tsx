@@ -11,22 +11,23 @@ export default async function SettingsPage() {
   const wallet = await getWallet(cookieJar, user.id);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col px-6 py-10">
-      <h1 className="mb-8 text-3xl font-semibold tracking-tight">Settings</h1>
+    <main className="pn-page max-w-4xl">
+      <Link href="/my" className="pn-backlink mb-5">← Back to my commitments</Link>
+      <h1 className="pn-title mb-8 text-5xl">Settings</h1>
 
-      <section className="flex flex-col gap-6">
+      <section className="pn-panel flex flex-col gap-6 rounded-2xl p-6">
         <Row label="Username">
           <span className="font-mono">@{profile.username ?? 'pending'}</span>
         </Row>
 
         <Row label="Email">
-          <span className="font-mono text-sm text-neutral-400">{user.email}</span>
+          <span className="font-mono text-sm text-[var(--ink-2)]">{user.email}</span>
         </Row>
 
         <Row label="Linked wallet">
           {wallet ? (
             <div className="flex items-center gap-2">
-              <span className="font-mono text-xs text-neutral-300">{wallet.address}</span>
+              <span className="font-mono text-xs text-[var(--ink-1)]">{wallet.address}</span>
               <CopyButton value={wallet.address} />
             </div>
           ) : (
@@ -46,8 +47,8 @@ export default async function SettingsPage() {
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1 border-b border-neutral-900 pb-4">
-      <span className="text-xs uppercase tracking-wider text-neutral-500">{label}</span>
+    <div className="flex flex-col gap-1 border-b border-[var(--line)] pb-4">
+      <span className="text-xs uppercase tracking-wider text-[var(--ink-2)]">{label}</span>
       <div>{children}</div>
     </div>
   );

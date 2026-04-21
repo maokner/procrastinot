@@ -51,7 +51,7 @@ export function DeadlineCountdown({
 
   const expired = remaining <= 0;
   return (
-    <span className={className ?? (expired ? 'text-red-400' : 'text-neutral-200')}>
+    <span className={className ?? (expired ? 'text-[var(--danger)]' : 'text-[var(--ink-0)]')}>
       {format(remaining)}
     </span>
   );

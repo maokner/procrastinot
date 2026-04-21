@@ -41,8 +41,14 @@ export function SessionMenu({ variant = 'desktop' }: { variant?: Variant }) {
     return (
       <div className="flex flex-col gap-2">
         <Link
+          href="/my"
+          className="pn-btn pn-btn-secondary w-full text-sm"
+        >
+          My commitments
+        </Link>
+        <Link
           href="/settings"
-          className="rounded border border-neutral-800 px-3 py-1.5 text-center text-sm hover:bg-neutral-900"
+          className="pn-btn pn-btn-secondary w-full text-sm"
         >
           Settings
         </Link>
@@ -50,7 +56,7 @@ export function SessionMenu({ variant = 'desktop' }: { variant?: Variant }) {
           type="button"
           onClick={handleDisconnect}
           disabled={busy}
-          className="rounded border border-neutral-800 px-3 py-1.5 text-sm hover:bg-neutral-900 disabled:opacity-50"
+          className="pn-btn pn-btn-danger w-full text-sm"
         >
           {busy ? 'Disconnecting…' : 'Disconnect'}
         </button>
@@ -71,30 +77,38 @@ export function SessionMenu({ variant = 'desktop' }: { variant?: Variant }) {
             setOpen(false);
           }
         }}
-        className="rounded border border-neutral-800 px-3 py-1.5 text-sm hover:bg-neutral-900"
+        className="pn-btn pn-btn-secondary px-3 py-2 text-sm"
       >
-        Menu
+        Account
       </button>
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 mt-2 w-40 rounded border border-neutral-800 bg-neutral-950 p-1 shadow-xl"
+          className="absolute right-0 mt-2 w-48 rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,0.96)] p-2 shadow-lg"
         >
           <Link
-            href="/settings"
+            href="/my"
             role="menuitem"
-            className="block rounded px-2 py-1.5 text-sm hover:bg-neutral-900"
+            className="block rounded-xl px-3 py-2 text-sm hover:bg-[var(--accent-soft)]"
             onClick={() => setOpen(false)}
           >
-            Settings
+            My commitments
           </Link>
+          <Link
+          href="/settings"
+          role="menuitem"
+          className="block rounded-xl px-3 py-2 text-sm hover:bg-[var(--accent-soft)]"
+          onClick={() => setOpen(false)}
+        >
+          Settings
+        </Link>
           <button
             type="button"
             role="menuitem"
             onMouseDown={(e) => e.preventDefault()}
             onClick={handleDisconnect}
             disabled={busy}
-            className="block w-full rounded px-2 py-1.5 text-left text-sm hover:bg-neutral-900 disabled:opacity-50"
+            className="block w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--danger)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
           >
             {busy ? 'Disconnecting…' : 'Disconnect'}
           </button>

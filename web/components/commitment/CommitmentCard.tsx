@@ -5,9 +5,9 @@ import { DeadlineCountdown } from './DeadlineCountdown';
 type ViewerRole = 'creator' | 'enemy';
 
 const STATUS_CLASS: Record<string, string> = {
-  active: 'bg-neutral-800 text-neutral-200 border-neutral-700',
-  completed: 'bg-green-950 text-green-300 border-green-900',
-  forfeited: 'bg-red-950 text-red-300 border-red-900',
+  active: 'bg-white/80 text-[var(--ink-1)] border-[var(--line)]',
+  completed: 'bg-[color-mix(in_srgb,var(--success)_12%,white)] text-[var(--success)] border-[color-mix(in_srgb,var(--success)_35%,var(--line))]',
+  forfeited: 'bg-[color-mix(in_srgb,var(--danger)_10%,white)] text-[var(--danger)] border-[color-mix(in_srgb,var(--danger)_35%,var(--line))]',
 };
 
 function shortAddr(a: string) {
@@ -30,11 +30,11 @@ export function CommitmentCard({
   const otherRoleLabel = role === 'creator' ? 'enemy' : 'creator';
 
   return (
-    <li className="rounded border border-neutral-800 bg-neutral-950 p-4">
+    <li className="border-b border-[var(--line)] py-4 last:border-none">
       <Link
         href={`/c/${commitment.id}`}
         prefetch
-        className="flex flex-col gap-2 hover:opacity-90"
+        className="flex flex-col gap-2 transition hover:opacity-80"
       >
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold">#{commitment.id}</span>
@@ -44,20 +44,20 @@ export function CommitmentCard({
             {commitment.status}
           </span>
         </div>
-        <p className="line-clamp-2 text-sm text-neutral-300">{commitment.task}</p>
+        <p className="line-clamp-2 text-sm text-[var(--ink-1)]">{commitment.task}</p>
         <div className="flex items-center justify-between text-xs">
-          <span className="text-neutral-500">
+          <span className="text-[var(--ink-2)]">
             {otherRoleLabel}{' '}
-            <span className={role === 'creator' ? 'text-red-300' : 'text-neutral-300'}>
+            <span className={role === 'creator' ? 'text-[var(--danger)]' : 'text-[var(--ink-1)]'}>
               {otherLabel}
             </span>
           </span>
-          <span className="flex items-center gap-3 text-neutral-400">
+          <span className="flex items-center gap-3 text-[var(--ink-2)]">
             <span>{commitment.stake} USDC</span>
             {commitment.status === 'active' && (
               <DeadlineCountdown
                 deadline={commitment.deadline}
-                className="text-neutral-400"
+                className="text-[var(--ink-2)]"
               />
             )}
           </span>

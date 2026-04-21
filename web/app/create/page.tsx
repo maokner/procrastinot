@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -27,8 +28,12 @@ type Suggestion = { username: string; display_name: string | null };
 
 export default function CreatePage() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col px-6 py-8">
-      <h1 className="mb-6 text-2xl font-semibold">New commitment</h1>
+    <main className="pn-page max-w-4xl">
+      <Link href="/my" className="pn-backlink mb-5">← Back to my commitments</Link>
+      <h1 className="pn-title mb-2 text-5xl">New commitment</h1>
+      <p className="pn-copy mb-8 max-w-2xl">
+        Fill in one clear task, one grading rubric, and one username enemy. Then approve and commit.
+      </p>
       <ConnectGate>
         <CreateForm />
       </ConnectGate>
@@ -277,35 +282,35 @@ function CreateForm() {
   const busy = step === 'approving' || step === 'creating';
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+    <form onSubmit={handleSubmit} className="pn-panel flex flex-col gap-5 rounded-2xl p-6">
       <label className="flex flex-col gap-1.5">
-        <span className="text-sm text-neutral-300">Task</span>
+        <span className="text-sm text-[var(--ink-1)]">Task</span>
         <textarea
           value={task}
           onChange={(e) => setTask(e.target.value)}
           rows={3}
-          className="rounded border border-neutral-800 bg-neutral-950 p-3 text-neutral-100"
+          className="pn-textarea"
           placeholder="What will you finish?"
         />
       </label>
 
       <label className="flex flex-col gap-1.5">
-        <span className="text-sm text-neutral-300">Rubric</span>
+        <span className="text-sm text-[var(--ink-1)]">Rubric</span>
         <textarea
           value={rubric}
           onChange={(e) => setRubric(e.target.value)}
           rows={3}
-          className="rounded border border-neutral-800 bg-neutral-950 p-3 text-neutral-100"
+          className="pn-textarea"
           placeholder="What would count as irrefutable proof?"
         />
       </label>
 
       <div className="flex flex-col gap-1.5" ref={sugRef}>
-        <span className="text-sm text-neutral-300">
-          Enemy <span className="text-red-400">(they get the money if you fail)</span>
+        <span className="text-sm text-[var(--ink-1)]">
+          Enemy <span className="text-[var(--danger)]">(they get the money if you fail)</span>
         </span>
         <div className="relative">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-2)]">
             @
           </span>
           <input
@@ -317,11 +322,11 @@ function CreateForm() {
             onFocus={() => setShowSug(true)}
             autoComplete="off"
             spellCheck={false}
-            className="w-full rounded border border-neutral-800 bg-neutral-950 p-3 pl-7 font-mono text-neutral-100"
+            className="pn-input pl-7 font-mono"
             placeholder="oliver"
           />
           {showSug && suggestions.length > 0 && (
-            <ul className="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-auto rounded border border-neutral-800 bg-neutral-950 py-1 text-sm shadow-lg">
+            <ul className="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-auto rounded-xl border border-[var(--line)] bg-white py-1 text-sm shadow-lg">
               {suggestions.map((s) => (
                 <li key={s.username}>
                   <button
@@ -330,11 +335,11 @@ function CreateForm() {
                       setEnemyInput(s.username);
                       setShowSug(false);
                     }}
-                    className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-neutral-900"
+                    className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-[var(--accent-soft)]"
                   >
-                    <span className="font-mono text-neutral-100">@{s.username}</span>
+                    <span className="font-mono text-[var(--ink-0)]">@{s.username}</span>
                     {s.display_name && (
-                      <span className="text-xs text-neutral-500">{s.display_name}</span>
+                      <span className="text-xs text-[var(--ink-2)]">{s.display_name}</span>
                     )}
                   </button>
                 </li>
@@ -343,59 +348,59 @@ function CreateForm() {
           )}
         </div>
         {enemyResolved && (
-          <span className="font-mono text-xs text-neutral-500">
+          <span className="font-mono text-xs text-[var(--ink-2)]">
             @{normalizedUsername} → {enemyResolved.slice(0, 6)}…{enemyResolved.slice(-4)}
           </span>
         )}
         {resolveError && (
-          <span className="text-xs text-red-400">{resolveError}</span>
+          <span className="text-xs text-[var(--danger)]">{resolveError}</span>
         )}
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm text-neutral-300">Stake (USDC)</span>
+          <span className="text-sm text-[var(--ink-1)]">Stake (USDC)</span>
           <input
             type="number"
             step="0.01"
             min="0"
             value={stake}
             onChange={(e) => setStake(e.target.value)}
-            className="rounded border border-neutral-800 bg-neutral-950 p-3 text-neutral-100"
+            className="pn-input"
             placeholder="10"
           />
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm text-neutral-300">Oracle fee (USDC)</span>
+          <span className="text-sm text-[var(--ink-1)]">Oracle fee (USDC)</span>
           <input
             type="number"
             step="0.01"
             min="0"
             value={oracleFee}
             onChange={(e) => setOracleFee(e.target.value)}
-            className="rounded border border-neutral-800 bg-neutral-950 p-3 text-neutral-100"
+            className="pn-input"
           />
         </label>
       </div>
 
       <label className="flex flex-col gap-1.5">
-        <span className="text-sm text-neutral-300">Deadline</span>
+        <span className="text-sm text-[var(--ink-1)]">Deadline</span>
         <input
           type="datetime-local"
           value={deadlineLocal}
           onChange={(e) => setDeadlineLocal(e.target.value)}
-          className="rounded border border-neutral-800 bg-neutral-950 p-3 text-neutral-100"
+          className="pn-input"
         />
       </label>
 
       {errorMsg && (
-        <p className="rounded border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+        <p className="rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--line))] bg-[color-mix(in_srgb,var(--danger)_10%,white)] p-3 text-sm text-[var(--danger)]">
           {errorMsg}
         </p>
       )}
 
       {step !== 'idle' && step !== 'error' && (
-        <div className="rounded border border-neutral-800 bg-neutral-950 p-4 text-sm">
+        <div className="rounded-xl border border-[var(--line)] bg-white/60 p-4 text-sm">
           <StepIndicator step={step} approveHash={approveHash} createHash={createHash} />
         </div>
       )}
@@ -403,13 +408,13 @@ function CreateForm() {
       <button
         type="submit"
         disabled={busy || !isContractConfigured() || !enemyResolved}
-        className="rounded bg-neutral-100 px-6 py-3 font-medium text-neutral-950 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+        className="pn-btn pn-btn-primary px-6 py-3"
       >
         {busy ? 'Working…' : 'Commit'}
       </button>
 
       {!isContractConfigured() && (
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-[var(--ink-2)]">
           Set <code>NEXT_PUBLIC_CONTRACT_ADDRESS</code> in <code>.env.local</code> to enable write actions.
         </p>
       )}
@@ -457,7 +462,7 @@ function StepRow({
 }) {
   return (
     <div className="flex items-center justify-between">
-      <span className={done ? 'text-green-400' : active ? 'text-neutral-100' : 'text-neutral-600'}>
+      <span className={done ? 'text-[var(--success)]' : active ? 'text-[var(--ink-0)]' : 'text-[var(--ink-2)]'}>
         {done ? '✓ ' : active ? '… ' : '  '}{label}
       </span>
       {hash && (
@@ -465,7 +470,7 @@ function StepRow({
           href={etherscanTxUrl(hash, CHAIN_ID)}
           target="_blank"
           rel="noreferrer"
-          className="text-xs text-neutral-400 underline"
+          className="text-xs text-[var(--ink-2)] underline"
         >
           tx
         </a>

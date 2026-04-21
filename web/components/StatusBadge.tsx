@@ -3,15 +3,15 @@ import { Status } from '@procrastinot/abi';
 const MAP: Record<Status, { label: string; classes: string }> = {
   [Status.Active]: {
     label: 'Active',
-    classes: 'bg-neutral-800 text-neutral-200 border-neutral-700',
+    classes: 'bg-white/80 text-[var(--ink-1)] border-[var(--line)]',
   },
   [Status.Completed]: {
     label: 'Completed',
-    classes: 'bg-green-950 text-green-300 border-green-900',
+    classes: 'bg-[color-mix(in_srgb,var(--success)_12%,white)] text-[var(--success)] border-[color-mix(in_srgb,var(--success)_35%,var(--line))]',
   },
   [Status.Forfeited]: {
     label: 'Forfeited',
-    classes: 'bg-red-950 text-red-300 border-red-900',
+    classes: 'bg-[color-mix(in_srgb,var(--danger)_10%,white)] text-[var(--danger)] border-[color-mix(in_srgb,var(--danger)_35%,var(--line))]',
   },
 };
 
