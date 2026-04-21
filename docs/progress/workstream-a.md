@@ -6,7 +6,7 @@
 
 ## Checklist
 
-- [ ] A1 — `supabase/migrations/0003_wallet_auth.sql`: make `profiles.username` nullable (drop + re-add check) — user must apply via Supabase SQL editor
+- [x] A1 — `supabase/migrations/0003_wallet_auth.sql`: make `profiles.username` nullable (drop + re-add check) — user must apply via Supabase SQL editor
 - [ ] A2 — Add `SIWE_JWT_SECRET` env loader in `web/lib/env.ts`; document source (Supabase → Settings → API → JWT Secret)
 - [ ] A3 — Rewrite `web/app/api/siwe/verify/route.ts` as session-minting entry point (JWT-direct mint, cookie via `@supabase/ssr`, returns `{ needsUsername }`)
 - [ ] A4 — Rewrite `web/app/login/page.tsx` to a single-purpose page with `<SiweButton />`
@@ -25,4 +25,4 @@
 
 ## Next action on resume
 
-Implement A1: create `supabase/migrations/0003_wallet_auth.sql` making `profiles.username` nullable with an `is null OR regex` check constraint. After committing, set Status: blocked pending user applying the SQL.
+Implement A2: create `web/lib/env.ts` to require `SIWE_JWT_SECRET` at server startup. Reminder: user still needs to apply `0003_wallet_auth.sql` in Supabase dashboard before A10 will work, and add `SIWE_JWT_SECRET` + `NEXT_PUBLIC_SITE_URL` env vars in Vercel after A9.
