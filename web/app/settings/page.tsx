@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { getWallet, requireProfile } from '@/lib/auth';
-import { SignOutButton } from '@/components/auth/SignOutButton';
 import { CopyButton } from '@/components/auth/CopyButton';
 
 export const dynamic = 'force-dynamic';
@@ -45,9 +44,7 @@ export default async function SettingsPage() {
 
         {/* Future: "change wallet" flow. For now, one wallet per profile. */}
 
-        <div className="mt-6">
-          <SignOutButton />
-        </div>
+        {/* Sign-out lives in the global AppHeader's SessionMenu now. */}
       </section>
     </main>
   );
