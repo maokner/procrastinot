@@ -7,7 +7,7 @@
 ## Checklist
 
 - [x] C-web-1 — `supabase/migrations/0004_evidence_storage.sql` (bucket + policies; user applies SQL)
-- [ ] C-web-2 — `web/lib/storage.ts` upload helper
+- [x] C-web-2 — `web/lib/storage.ts` upload helper
 - [ ] C-web-3 — `web/lib/image-resize.ts` client-side resize helper
 - [ ] C-web-4 — Rewrite `SubmitEvidenceForm.tsx` with Photo + Link/text tabs
 - [ ] C-web-5 — Render image thumbnails from manifest in the evidence view
@@ -31,5 +31,5 @@
 ## Next action on resume
 
 User: apply `supabase/migrations/0004_evidence_storage.sql` in the Supabase
-dashboard. Agent: implement C-web-2 (`web/lib/storage.ts`) next — it doesn't
-depend on the SQL landing first.
+dashboard (still blocking C-web-6). Agent: implement C-web-3
+(`web/lib/image-resize.ts`).
