@@ -1,12 +1,12 @@
 # Workstream C-web — Image upload UI + Supabase Storage
 
-**Status:** in-progress
+**Status:** blocked
 **Owner agent:** claude-code (opus-4.7) session 2026-04-20
 **Last updated:** 2026-04-20
 
 ## Checklist
 
-- [ ] C-web-1 — `supabase/migrations/0004_evidence_storage.sql` (bucket + policies; user applies SQL)
+- [x] C-web-1 — `supabase/migrations/0004_evidence_storage.sql` (bucket + policies; user applies SQL)
 - [ ] C-web-2 — `web/lib/storage.ts` upload helper
 - [ ] C-web-3 — `web/lib/image-resize.ts` client-side resize helper
 - [ ] C-web-4 — Rewrite `SubmitEvidenceForm.tsx` with Photo + Link/text tabs
@@ -19,6 +19,17 @@
 - 2026-04-20 — Path convention: `${profileId}/${commitmentId}/${attempt}-${index}.${ext}` plus `${profileId}/${commitmentId}/${attempt}-manifest.json`. First folder segment must equal `auth.uid()::text` to satisfy the INSERT policy (`storage.foldername(name)[1] = auth.uid()::text`).
 - 2026-04-20 — HEIC: browser `createImageBitmap` cannot decode HEIC in Safari/Chrome desktop. Skip resize and upload original file.
 
+- 2026-04-20 — C-web-1 done. BLOCKED pending user action: paste
+  `supabase/migrations/0004_evidence_storage.sql` into the Supabase SQL Editor
+  and confirm the `evidence` bucket appears in Storage with the three RLS
+  policies (`evidence: public read`, `evidence: owner insert`,
+  `evidence: owner update`). Agent continues with the web code (C-web-2
+  through C-web-5) in parallel — they can be written and committed before
+  the SQL lands, since uploads only start failing at runtime, not at build
+  time.
+
 ## Next action on resume
 
-Implement C-web-1: write `supabase/migrations/0004_evidence_storage.sql`, commit, and mark the subtask blocked pending the user running the SQL in the Supabase dashboard.
+User: apply `supabase/migrations/0004_evidence_storage.sql` in the Supabase
+dashboard. Agent: implement C-web-2 (`web/lib/storage.ts`) next — it doesn't
+depend on the SQL landing first.
