@@ -9,7 +9,7 @@
 - [x] B1 — Create `web/components/layout/AppHeader.tsx` (server component)
 - [x] B2 — Create `web/components/layout/SessionMenu.tsx` (client component)
 - [x] B3 — Mount `<AppHeader />` in `web/app/layout.tsx`
-- [ ] B4 — Delete `SignOutButton.tsx`; remove duplicate button from `settings/page.tsx`
+- [x] B4 — Delete `SignOutButton.tsx`; remove duplicate button from `settings/page.tsx`
 - [ ] B5 — Mobile hamburger collapse at `< md`
 - [ ] B6 — Manual browser verification (user action)
 
@@ -20,4 +20,4 @@
 
 ## Next action on resume
 
-B3 done. Next: B4 — delete `web/components/auth/SignOutButton.tsx` and remove the now-duplicate signout button from `web/app/settings/page.tsx`.
+B4 done. Next: B5 — mobile hamburger pass. Already implemented via `<details>` in AppHeader; verify the breakpoint gating and tidy the markup.
