@@ -25,23 +25,23 @@ export async function AppHeader() {
     : null;
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[var(--line)]/80 bg-[rgba(246,242,233,0.92)] backdrop-blur">
-      <div className="mx-auto flex h-[var(--header-h)] w-full max-w-6xl items-center justify-between gap-4 px-4 md:px-6">
-        <Link href={authed ? '/my' : '/'} className="pn-title text-xl tracking-tight md:text-2xl">
-          PROCRASTINOT
+    <header className="sticky top-0 z-40 border-b-4 border-black bg-[rgba(249,249,247,0.97)]">
+      <div className="mx-auto flex h-[var(--header-h)] w-[var(--container)] items-center justify-between gap-4">
+        <Link href={authed ? '/my' : '/'} className="pn-title text-2xl uppercase md:text-4xl">
+          Procrastinot
         </Link>
 
-        <nav className="hidden items-center gap-2 md:flex">
+        <nav className="hidden items-center gap-6 md:flex">
           <HeaderLink href="/">Home</HeaderLink>
           <HeaderLink href="/create">Create</HeaderLink>
           <HeaderLink href="/my">My</HeaderLink>
           <HeaderLink href="/inbox">Inbox</HeaderLink>
         </nav>
 
-        <div className="hidden md:flex md:items-center md:gap-3">
+        <div className="hidden md:flex md:items-center md:gap-4">
           {authed && profile ? (
             <>
-              <span className="text-xs text-[var(--ink-2)]">
+              <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink-2)]">
                 @{profile.username ?? 'unnamed'}
                 {shortAddr ? <span className="ml-2 font-mono">{shortAddr}</span> : null}
               </span>
@@ -57,11 +57,11 @@ export async function AppHeader() {
         <details className="relative md:hidden">
           <summary
             aria-label="Open menu"
-            className="pn-btn pn-btn-secondary list-none px-3 py-2 text-sm [&::-webkit-details-marker]:hidden"
+            className="pn-btn pn-btn-secondary list-none px-3 py-2 [&::-webkit-details-marker]:hidden"
           >
             Menu
           </summary>
-          <div className="absolute right-0 mt-2 flex w-60 flex-col gap-2 rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,0.95)] p-3 shadow-lg">
+          <div className="absolute right-0 mt-2 flex w-64 flex-col gap-2 border-2 border-black bg-white p-3">
             <HeaderLink href="/" mobile>
               Home
             </HeaderLink>
@@ -76,7 +76,7 @@ export async function AppHeader() {
             </HeaderLink>
             {authed && profile ? (
               <div className="pt-2">
-                <div className="mb-2 text-xs text-[var(--ink-2)]">
+                <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink-2)]">
                   @{profile.username ?? 'unnamed'}
                   {shortAddr ? <span className="ml-2 font-mono">{shortAddr}</span> : null}
                 </div>
@@ -108,8 +108,8 @@ function HeaderLink({
       href={href}
       className={
         mobile
-          ? 'rounded-full px-3 py-2 text-sm text-[var(--ink-1)] hover:bg-[var(--accent-soft)] hover:text-[var(--ink-0)]'
-          : 'rounded-full px-3 py-2 text-sm text-[var(--ink-1)] transition hover:bg-[var(--accent-soft)] hover:text-[var(--ink-0)]'
+          ? 'border-b border-[var(--line)] px-0 py-3 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink-1)] hover:text-[var(--ink-0)]'
+          : 'border-b border-transparent pb-1 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink-1)] transition hover:border-black hover:text-[var(--ink-0)]'
       }
     >
       {children}

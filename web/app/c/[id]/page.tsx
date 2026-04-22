@@ -85,6 +85,9 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="pn-page max-w-4xl">
       <Link href="/my" className="pn-backlink mb-5">← Back to my commitments</Link>
+      <div className="mb-8 border-b-4 border-black pb-5">
+        <p className="pn-kicker mb-3">Commitment detail</p>
+      </div>
       {children}
     </main>
   );

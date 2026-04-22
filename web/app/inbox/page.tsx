@@ -32,11 +32,14 @@ export default async function InboxPage() {
   return (
     <main className="pn-page max-w-5xl">
       <Link href="/my" className="pn-backlink mb-5">← Back to my commitments</Link>
-      <h1 className="pn-title mb-2 text-5xl">Inbox</h1>
-      <p className="pn-copy mb-7 max-w-xl">
-        Commitments where you&apos;re the enemy. Past the deadline, you can
-        claim the stake.
-      </p>
+      <div className="mb-10 border-b-4 border-black pb-6">
+        <p className="pn-kicker mb-3">Adversarial inbox</p>
+        <h1 className="pn-title mb-4 text-5xl sm:text-6xl">Inbox</h1>
+        <p className="pn-copy max-w-2xl">
+          Commitments where you are the enemy. When the clock runs out, the stake
+          stops being hypothetical.
+        </p>
+      </div>
 
       <InboxList
         viewerProfileId={viewer.id}

@@ -86,7 +86,7 @@ export function ConnectButton() {
               className="pn-btn pn-btn-secondary px-3 py-2 text-xs"
               title="WalletConnect (mobile / QR)"
             >
-              {wcLoading ? 'Loading…' : 'More'}
+              {wcLoading ? 'Loading…' : 'QR / Mobile'}
             </button>
           )}
         </div>
@@ -119,21 +119,21 @@ export function ConnectButton() {
         onClick={() => setMenuOpen((v) => !v)}
         className="pn-btn pn-btn-secondary flex items-center gap-2 px-3 py-2 text-sm font-mono"
       >
-        <span className="inline-block h-2 w-2 rounded-full bg-[var(--success)]" />
+        <span className="inline-block h-2 w-2 bg-[var(--ink-0)]" />
         {address ? shorten(address) : ''}
         <svg width="10" height="10" viewBox="0 0 12 12" className="opacity-60">
           <path fill="currentColor" d="M2 4 L6 8 L10 4 Z" />
         </svg>
       </button>
       {menuOpen && (
-        <div className="absolute right-0 mt-2 w-48 rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,0.96)] py-1 text-sm shadow-lg">
+        <div className="absolute right-0 mt-2 w-48 border-2 border-black bg-white py-1 text-sm">
           <button
             type="button"
             onClick={() => {
               disconnect();
               setMenuOpen(false);
             }}
-            className="block w-full rounded-xl px-3 py-2 text-left hover:bg-[var(--accent-soft)]"
+            className="block w-full px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.14em] hover:bg-black hover:text-white"
           >
             Disconnect
           </button>

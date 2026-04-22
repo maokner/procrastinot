@@ -12,9 +12,9 @@ import { ForfeitButton, ClaimButton } from './ForfeitButton';
 import { VerdictLog } from './VerdictLog';
 
 const STATUS_CLASS: Record<string, string> = {
-  active: 'bg-white/80 text-[var(--ink-1)] border-[var(--line)]',
-  completed: 'bg-[color-mix(in_srgb,var(--success)_12%,white)] text-[var(--success)] border-[color-mix(in_srgb,var(--success)_35%,var(--line))]',
-  forfeited: 'bg-[color-mix(in_srgb,var(--danger)_10%,white)] text-[var(--danger)] border-[color-mix(in_srgb,var(--danger)_35%,var(--line))]',
+  active: 'border-black bg-black text-white',
+  completed: 'border-black bg-white text-black',
+  forfeited: 'border-black bg-[var(--bg-1)] text-[var(--ink-1)]',
 };
 
 const ATTEMPT_CAP = 3;
@@ -110,16 +110,16 @@ export function LiveCommitment({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="pn-title text-4xl">Commitment #{commitment.id}</h1>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="pn-title text-4xl sm:text-5xl">Commitment #{commitment.id}</h1>
         <span
-          className={`inline-block rounded border px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${STATUS_CLASS[commitment.status] ?? ''}`}
+          className={`inline-block border px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.16em] ${STATUS_CLASS[commitment.status] ?? ''}`}
         >
           {commitment.status}
         </span>
       </div>
 
-      <div className="pn-panel grid grid-cols-2 gap-4 rounded-2xl p-4 text-sm">
+      <div className="pn-panel grid gap-4 p-4 text-sm md:grid-cols-2 md:p-6">
         <Field label="Stake">{commitment.stake} USDC</Field>
         <Field label="Oracle fee (remaining)">{commitment.oracle_fee_remain} USDC</Field>
         <Field label="Attempts">
@@ -134,30 +134,30 @@ export function LiveCommitment({
         <Field label="Creator">
           <span className="font-mono text-xs">
             {creatorUsername ? (
-              <span className="text-neutral-100">@{creatorUsername}</span>
+              <span>@{creatorUsername}</span>
             ) : (
               shortAddr(commitment.creator_address)
             )}
           </span>
         </Field>
         <Field label="Enemy">
-          <span className="font-mono text-xs text-[var(--danger)]">
+          <span className="font-mono text-xs">
             {enemyUsername ? `@${enemyUsername}` : shortAddr(commitment.enemy_address)}
           </span>
         </Field>
       </div>
 
-      <section>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--ink-2)]">
+      <section className="border-t-4 border-black pt-5">
+        <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-[var(--ink-2)]">
           Task
         </h2>
-        <p className="whitespace-pre-wrap text-[var(--ink-0)]">{commitment.task}</p>
+        <p className="whitespace-pre-wrap text-xl leading-relaxed text-[var(--ink-0)]">{commitment.task}</p>
       </section>
-      <section>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--ink-2)]">
+      <section className="border-t border-[var(--line)] pt-5">
+        <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-[var(--ink-2)]">
           Rubric
         </h2>
-        <p className="whitespace-pre-wrap text-[var(--ink-1)]">{commitment.rubric}</p>
+        <p className="whitespace-pre-wrap text-lg leading-relaxed text-[var(--ink-1)]">{commitment.rubric}</p>
       </section>
 
       {canSubmit && (
@@ -170,14 +170,14 @@ export function LiveCommitment({
       {canForfeit && <ForfeitButton id={idBig} />}
       {canClaim && <ClaimButton id={idBig} label={`Claim ${commitment.stake} USDC`} />}
 
-      <section>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--ink-2)]">
+      <section className="border-t border-[var(--line)] pt-5">
+        <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-[var(--ink-2)]">
           Verdict history
         </h2>
         <VerdictLog events={events} chainId={chainId} />
       </section>
 
-      <div className="flex flex-wrap gap-2 border-t border-[var(--line)] pt-4">
+      <div className="flex flex-wrap gap-2 border-t-4 border-black pt-4">
         <Link href="/create" className="pn-btn pn-btn-secondary text-sm">
           Create next commitment
         </Link>
@@ -192,7 +192,7 @@ export function LiveCommitment({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-xs uppercase tracking-wide text-[var(--ink-2)]">{label}</span>
+      <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink-2)]">{label}</span>
       <span>{children}</span>
     </div>
   );

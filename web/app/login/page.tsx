@@ -30,14 +30,15 @@ export default async function LoginPage({
   return (
     <main className="pn-page max-w-2xl">
       <Link href="/" className="pn-backlink mb-6">← Back to home</Link>
-      <p className="pn-kicker mb-3">Access</p>
-      <h1 className="pn-title mb-3 text-5xl">Connect your wallet</h1>
-      <p className="pn-copy mb-8 max-w-xl text-base">
-        Procrastinot is passwordless now. Connect the wallet you&apos;ll stake from,
-        sign the SIWE message, and we&apos;ll either send you to onboarding or straight
-        into the app.
-      </p>
-      <section className="pn-panel rounded-2xl p-5">
+      <div className="mb-8 border-b-4 border-black pb-6">
+        <p className="pn-kicker mb-3">Access</p>
+        <h1 className="pn-title mb-3 text-5xl sm:text-6xl">Connect your wallet</h1>
+        <p className="pn-copy max-w-xl text-base">
+          Connect the wallet you&apos;ll stake from, sign the SIWE message, and we&apos;ll
+          route you to onboarding or directly into the app.
+        </p>
+      </div>
+      <section className="pn-panel p-5 md:p-6">
         <Suspense fallback={null}>
           <SiweButton nextPath={next} />
         </Suspense>

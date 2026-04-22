@@ -30,10 +30,14 @@ export default function CreatePage() {
   return (
     <main className="pn-page max-w-4xl">
       <Link href="/my" className="pn-backlink mb-5">← Back to my commitments</Link>
-      <h1 className="pn-title mb-2 text-5xl">New commitment</h1>
-      <p className="pn-copy mb-8 max-w-2xl">
-        Fill in one clear task, one grading rubric, and one username enemy. Then approve and commit.
-      </p>
+      <div className="mb-10 border-b-4 border-black pb-6">
+        <p className="pn-kicker mb-3">Draft</p>
+        <h1 className="pn-title mb-4 text-5xl sm:text-6xl">New commitment</h1>
+        <p className="pn-copy max-w-2xl">
+          Fill in one clear task, one grading rubric, and one username enemy. Then
+          approve the spend and lock the terms.
+        </p>
+      </div>
       <ConnectGate>
         <CreateForm />
       </ConnectGate>
@@ -282,7 +286,7 @@ function CreateForm() {
   const busy = step === 'approving' || step === 'creating';
 
   return (
-    <form onSubmit={handleSubmit} className="pn-panel flex flex-col gap-5 rounded-2xl p-6">
+    <form onSubmit={handleSubmit} className="pn-panel flex flex-col gap-5 p-6 md:p-8">
       <label className="flex flex-col gap-1.5">
         <span className="text-sm text-[var(--ink-1)]">Task</span>
         <textarea

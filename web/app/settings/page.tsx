@@ -13,9 +13,12 @@ export default async function SettingsPage() {
   return (
     <main className="pn-page max-w-4xl">
       <Link href="/my" className="pn-backlink mb-5">← Back to my commitments</Link>
-      <h1 className="pn-title mb-8 text-5xl">Settings</h1>
+      <div className="mb-8 border-b-4 border-black pb-6">
+        <p className="pn-kicker mb-3">Profile</p>
+        <h1 className="pn-title text-5xl sm:text-6xl">Settings</h1>
+      </div>
 
-      <section className="pn-panel flex flex-col gap-6 rounded-2xl p-6">
+      <section className="pn-panel flex flex-col gap-6 p-6 md:p-8">
         <Row label="Username">
           <span className="font-mono">@{profile.username ?? 'pending'}</span>
         </Row>
@@ -48,7 +51,7 @@ export default async function SettingsPage() {
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1 border-b border-[var(--line)] pb-4">
-      <span className="text-xs uppercase tracking-wider text-[var(--ink-2)]">{label}</span>
+      <span className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--ink-2)]">{label}</span>
       <div>{children}</div>
     </div>
   );

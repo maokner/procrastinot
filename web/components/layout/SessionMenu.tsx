@@ -84,12 +84,12 @@ export function SessionMenu({ variant = 'desktop' }: { variant?: Variant }) {
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 mt-2 w-48 rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,0.96)] p-2 shadow-lg"
+          className="absolute right-0 mt-2 w-48 border-2 border-black bg-white p-2"
         >
           <Link
             href="/my"
             role="menuitem"
-            className="block rounded-xl px-3 py-2 text-sm hover:bg-[var(--accent-soft)]"
+            className="block border-b border-[var(--line)] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] hover:bg-black hover:text-white"
             onClick={() => setOpen(false)}
           >
             My commitments
@@ -97,7 +97,7 @@ export function SessionMenu({ variant = 'desktop' }: { variant?: Variant }) {
           <Link
           href="/settings"
           role="menuitem"
-          className="block rounded-xl px-3 py-2 text-sm hover:bg-[var(--accent-soft)]"
+          className="block border-b border-[var(--line)] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] hover:bg-black hover:text-white"
           onClick={() => setOpen(false)}
         >
           Settings
@@ -108,7 +108,7 @@ export function SessionMenu({ variant = 'desktop' }: { variant?: Variant }) {
             onMouseDown={(e) => e.preventDefault()}
             onClick={handleDisconnect}
             disabled={busy}
-            className="block w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--danger)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
+            className="block w-full px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.14em] hover:bg-black hover:text-white disabled:opacity-50"
           >
             {busy ? 'Disconnecting…' : 'Disconnect'}
           </button>

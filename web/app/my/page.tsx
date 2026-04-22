@@ -22,10 +22,13 @@ export default async function MyPage() {
   return (
     <main className="pn-page max-w-5xl">
       <Link href="/" className="pn-backlink mb-5">← Back to home</Link>
-      <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
+      <div className="mb-10 flex flex-wrap items-end justify-between gap-4 border-b-4 border-black pb-6">
         <div>
           <p className="pn-kicker mb-2">Workspace</p>
-          <h1 className="pn-title text-5xl">My commitments</h1>
+          <h1 className="pn-title text-5xl sm:text-6xl">My commitments</h1>
+          <p className="pn-copy mt-4 max-w-2xl">
+            The active ledger of everything you have put at risk.
+          </p>
         </div>
         <Link href="/create" prefetch className="pn-btn pn-btn-primary">
           New commitment
@@ -33,14 +36,17 @@ export default async function MyPage() {
       </div>
 
       {commitments.length === 0 ? (
-        <section className="pn-panel rounded-2xl p-6">
-          <p className="pn-copy mb-4">No commitments yet.</p>
+        <section className="pn-panel p-6 md:p-8">
+          <p className="pn-kicker mb-3">Empty state</p>
+          <p className="pn-copy mb-4 max-w-xl">
+            No commitments yet. Start with one deliverable and one consequence.
+          </p>
           <Link href="/create" prefetch className="pn-btn pn-btn-primary">
             Create one
           </Link>
         </section>
       ) : (
-        <ul className="flex flex-col gap-3">
+        <ul className="flex flex-col border-t-4 border-black">
           {commitments.map((c) => {
             const role: 'creator' | 'enemy' =
               c.creator_profile === viewer.id ? 'creator' : 'enemy';

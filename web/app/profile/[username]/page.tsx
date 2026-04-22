@@ -48,16 +48,16 @@ export default async function PublicProfilePage({ params }: Props) {
       <Link href="/my" className="pn-backlink mb-6">← Back to my commitments</Link>
 
       {/* Profile header */}
-      <section className="pn-panel flex items-center gap-5 rounded-2xl p-6 mb-6">
+      <section className="pn-panel mb-6 flex items-center gap-5 p-6 md:p-8">
         {data.avatar_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={data.avatar_url}
             alt={`@${data.username}`}
-            className="h-20 w-20 rounded-full border border-[var(--line)] object-cover"
+            className="h-20 w-20 border border-black object-cover"
           />
         ) : (
-          <div className="flex h-20 w-20 items-center justify-center rounded-full border border-[var(--line)] bg-white/70 text-2xl font-semibold uppercase">
+          <div className="flex h-20 w-20 items-center justify-center border border-black bg-white text-2xl font-semibold uppercase">
             {data.username.slice(0, 1)}
           </div>
         )}
@@ -76,8 +76,8 @@ export default async function PublicProfilePage({ params }: Props) {
           { label: 'Total staked', value: `${fmt(stats.totalStaked)} USDC` },
           { label: 'Total forfeited', value: `${fmt(stats.totalForfeited)} USDC` },
         ] as const).map(({ label, value }) => (
-          <div key={label} className="pn-panel rounded-xl p-4 flex flex-col gap-1">
-            <span className="text-xs text-[var(--ink-2)] uppercase tracking-wide">{label}</span>
+          <div key={label} className="pn-panel flex flex-col gap-1 p-4">
+            <span className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--ink-2)]">{label}</span>
             <span className="text-xl font-semibold">{value}</span>
           </div>
         ))}
@@ -85,7 +85,7 @@ export default async function PublicProfilePage({ params }: Props) {
 
       {/* Enemy stats */}
       {enemyStats.timesNamed > 0 && (
-        <section className="pn-panel rounded-xl p-4 mb-6 flex flex-wrap gap-6 text-sm">
+        <section className="pn-panel mb-6 flex flex-wrap gap-6 p-4 text-sm">
           <div>
             <span className="text-[var(--ink-2)]">Times named as enemy: </span>
             <span className="font-semibold">{enemyStats.timesNamed}</span>
@@ -99,7 +99,7 @@ export default async function PublicProfilePage({ params }: Props) {
 
       {/* Active commitments */}
       {active.length > 0 && (
-        <section className="pn-panel rounded-2xl px-6 mb-6">
+        <section className="pn-panel mb-6 px-6">
           <h2 className="pn-label py-4 border-b border-[var(--line)]">Active</h2>
           <ul>
             {active.map(c => (
@@ -116,7 +116,7 @@ export default async function PublicProfilePage({ params }: Props) {
 
       {/* Past commitments */}
       {past.length > 0 && (
-        <section className="pn-panel rounded-2xl px-6">
+        <section className="pn-panel px-6">
           <h2 className="pn-label py-4 border-b border-[var(--line)]">Past</h2>
           <ul>
             {past.map(c => (

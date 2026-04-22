@@ -82,7 +82,7 @@ export function InboxList({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex gap-2 border-b border-[var(--line)] text-sm">
+      <div className="flex gap-2 border-b-4 border-black text-sm">
         <TabButton selected={tab === 'active'} onClick={() => setTab('active')}>
           Active ({active.length})
         </TabButton>
@@ -131,9 +131,9 @@ function TabButton({
     <button
       type="button"
       onClick={onClick}
-      className={`-mb-px border-b-2 px-3 py-2 text-sm ${
+      className={`-mb-[4px] border-b-4 px-3 py-3 font-mono text-[11px] uppercase tracking-[0.14em] ${
         selected
-          ? 'border-[var(--accent)] text-[var(--ink-0)]'
+          ? 'border-black text-[var(--ink-0)]'
           : 'border-transparent text-[var(--ink-2)] hover:text-[var(--ink-0)]'
       }`}
     >
@@ -160,16 +160,16 @@ function InboxRow({
   const canClaim = commitment.status === 'active' && now >= deadlineSec;
 
   return (
-    <li className="flex flex-col gap-3 border-b border-[var(--line)] py-4 last:border-none">
+    <li className="flex flex-col gap-3 border-b border-[var(--line)] py-5 last:border-none">
       <div className="flex items-center justify-between">
         <Link
           href={`/c/${commitment.id}`}
           prefetch
-          className="text-sm font-semibold hover:opacity-90"
+          className="font-mono text-xs uppercase tracking-[0.16em] hover:opacity-90"
         >
           #{commitment.id}
         </Link>
-        <span className="text-xs text-[var(--ink-2)]">
+        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink-2)]">
           from{' '}
           {creatorUsername ? (
             <span className="text-[var(--ink-1)]">@{creatorUsername}</span>
@@ -181,9 +181,9 @@ function InboxRow({
           )}
         </span>
       </div>
-      <p className="line-clamp-2 text-sm text-[var(--ink-1)]">{commitment.task}</p>
+      <p className="line-clamp-2 text-lg leading-snug text-[var(--ink-1)]">{commitment.task}</p>
       <div className="flex items-center justify-between">
-        <span className="text-xs text-[var(--ink-2)]">
+        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink-2)]">
           {commitment.status === 'active' ? (
             <>
               <DeadlineCountdown

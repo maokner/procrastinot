@@ -9,7 +9,7 @@ export const ConnectButtonLazy = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-9 w-[140px] rounded bg-neutral-900" aria-hidden />
+      <div className="h-11 w-[168px] border-2 border-black bg-black" aria-hidden />
     ),
   },
 );

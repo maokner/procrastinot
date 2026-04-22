@@ -38,11 +38,11 @@ export function VerdictLog({
       {events.map((ev) => (
         <li
           key={ev.id}
-          className="rounded-xl border border-[var(--line)] bg-white/60 p-3"
+          className="border border-black bg-white p-4"
         >
           <div className="flex items-center justify-between">
             <span className="font-medium">{labelFor(ev)}</span>
-            <span className="flex items-center gap-3 text-xs text-[var(--ink-2)]">
+            <span className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink-2)]">
               <span>{relative(ev.created_at)}</span>
               <a
                 href={etherscanTxUrl(ev.tx_hash, chainId)}

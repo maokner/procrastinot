@@ -5,9 +5,9 @@ import { DeadlineCountdown } from './DeadlineCountdown';
 type ViewerRole = 'creator' | 'enemy';
 
 const STATUS_CLASS: Record<string, string> = {
-  active: 'bg-white/80 text-[var(--ink-1)] border-[var(--line)]',
-  completed: 'bg-[color-mix(in_srgb,var(--success)_12%,white)] text-[var(--success)] border-[color-mix(in_srgb,var(--success)_35%,var(--line))]',
-  forfeited: 'bg-[color-mix(in_srgb,var(--danger)_10%,white)] text-[var(--danger)] border-[color-mix(in_srgb,var(--danger)_35%,var(--line))]',
+  active: 'border-black bg-black text-white',
+  completed: 'border-black bg-white text-black',
+  forfeited: 'border-black bg-[var(--bg-1)] text-[var(--ink-1)]',
 };
 
 function shortAddr(a: string) {
@@ -30,29 +30,29 @@ export function CommitmentCard({
   const otherRoleLabel = role === 'creator' ? 'enemy' : 'creator';
 
   return (
-    <li className="border-b border-[var(--line)] py-4 last:border-none">
+    <li className="border-b border-[var(--line)] py-5 last:border-none">
       <Link
         href={`/c/${commitment.id}`}
         prefetch
-        className="flex flex-col gap-2 transition hover:opacity-80"
+        className="flex flex-col gap-3 transition hover:bg-[var(--bg-1)]"
       >
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold">#{commitment.id}</span>
+          <span className="font-mono text-xs uppercase tracking-[0.16em]">#{commitment.id}</span>
           <span
-            className={`inline-block rounded border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${STATUS_CLASS[commitment.status] ?? ''}`}
+            className={`inline-block border px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.16em] ${STATUS_CLASS[commitment.status] ?? ''}`}
           >
             {commitment.status}
           </span>
         </div>
-        <p className="line-clamp-2 text-sm text-[var(--ink-1)]">{commitment.task}</p>
-        <div className="flex items-center justify-between text-xs">
+        <p className="line-clamp-2 text-lg leading-snug text-[var(--ink-1)]">{commitment.task}</p>
+        <div className="flex items-center justify-between gap-4 text-xs">
           <span className="text-[var(--ink-2)]">
             {otherRoleLabel}{' '}
-            <span className={role === 'creator' ? 'text-[var(--danger)]' : 'text-[var(--ink-1)]'}>
+            <span className={role === 'creator' ? 'font-mono text-[var(--ink-0)]' : 'text-[var(--ink-1)]'}>
               {otherLabel}
             </span>
           </span>
-          <span className="flex items-center gap-3 text-[var(--ink-2)]">
+          <span className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--ink-2)]">
             <span>{commitment.stake} USDC</span>
             {commitment.status === 'active' && (
               <DeadlineCountdown

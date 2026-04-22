@@ -13,8 +13,8 @@ type Variant = 'forfeit' | 'claim';
 
 /**
  * Unified button for the `forfeit(id)` contract call.
- * - variant='forfeit' (creator-side, after deadline): red, "Forfeit to enemy".
- * - variant='claim'   (enemy-side, after deadline):   green, "Claim X USDC".
+ * - variant='forfeit' (creator-side, after deadline): outline emphasis.
+ * - variant='claim'   (enemy-side, after deadline):   solid emphasis.
  * Both call the same function — the contract pays the enemy (stake) and
  * sends the remaining oracleFee to the operator (v2 semantics).
  */

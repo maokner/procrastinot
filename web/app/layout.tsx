@@ -1,18 +1,28 @@
 import type { Metadata } from 'next';
-import { Fraunces, Manrope } from 'next/font/google';
+import { Inter, JetBrains_Mono, Lora, Playfair_Display } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
 import { AppHeader } from '@/components/layout/AppHeader';
 
-const manrope = Manrope({
+const body = Lora({
   subsets: ['latin'],
   display: 'swap',
   variable: '--font-body',
 });
-const fraunces = Fraunces({
+const brand = Playfair_Display({
   subsets: ['latin'],
   display: 'swap',
   variable: '--font-brand',
+});
+const mono = JetBrains_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-mono',
+});
+const ui = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-ui',
 });
 
 export const metadata: Metadata = {
@@ -30,12 +40,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${manrope.variable} ${fraunces.variable} pn-body min-h-screen`}>
+      <body className={`${body.variable} ${brand.variable} ${mono.variable} ${ui.variable} pn-body min-h-screen`}>
         <Providers>
+          <a href="#content-start" className="pn-skip-link">
+            Skip to content
+          </a>
           {/* AppHeader is a server component but lives inside Providers so
               SessionMenu's wagmi hooks have a WagmiProvider ancestor. */}
           <AppHeader />
-          {children}
+          <div id="content-start">{children}</div>
         </Providers>
       </body>
     </html>
