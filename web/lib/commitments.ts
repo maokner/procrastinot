@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { supabaseServer } from './supabase.js';
+import { supabaseAdmin } from './supabase-admin.js';
 import type { Commitment, Profile, VerdictEvent } from './db-types.js';
 
 export type CommitmentWithProfiles = Commitment & {
@@ -84,6 +85,54 @@ export async function listVerdictEvents(commitmentId: number): Promise<VerdictEv
     .order('block_number', { ascending: true });
   if (error) throw error;
   return (data ?? []) as VerdictEvent[];
+}
+
+/** Aggregate stats for a user's commitments as creator (public profile view). */
+export async function getProfileStats(profileId: string) {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb
+    .from('commitments')
+    .select('status, stake')
+    .eq('creator_profile', profileId);
+  if (error) throw error;
+  const rows = (data ?? []) as Pick<Commitment, 'status' | 'stake'>[];
+  const total = rows.length;
+  const completed = rows.filter(c => c.status === 'completed').length;
+  const passRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const totalStaked = rows.reduce((sum, c) => sum + parseFloat(c.stake), 0);
+  const totalForfeited = rows
+    .filter(c => c.status === 'forfeited')
+    .reduce((sum, c) => sum + parseFloat(c.stake), 0);
+  return { total, passRate, totalStaked, totalForfeited };
+}
+
+/** Fetch up to 50 of a user's commitments as creator, newest-first (bypasses RLS). */
+export async function listPublicCommitments(profileId: string, limit = 50) {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb
+    .from('commitments')
+    .select('*')
+    .eq('creator_profile', profileId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as Commitment[];
+}
+
+/** Count times named as enemy and total USDC claimed from forfeited commitments. */
+export async function getEnemyStats(profileId: string) {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb
+    .from('commitments')
+    .select('status, stake')
+    .eq('enemy_profile', profileId);
+  if (error) throw error;
+  const rows = (data ?? []) as Pick<Commitment, 'status' | 'stake'>[];
+  const timesNamed = rows.length;
+  const totalClaimed = rows
+    .filter(c => c.status === 'forfeited')
+    .reduce((sum, c) => sum + parseFloat(c.stake), 0);
+  return { timesNamed, totalClaimed };
 }
 
 /** Batch-look-up profiles by id (for rendering usernames on list views). */
