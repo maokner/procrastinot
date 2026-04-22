@@ -326,8 +326,9 @@ function CreateForm() {
             onFocus={() => setShowSug(true)}
             autoComplete="off"
             spellCheck={false}
-            className="pn-input pl-7 font-mono"
+            className="pn-input font-mono"
             placeholder="oliver"
+            style={{ paddingLeft: '1.75rem' }}
           />
           {showSug && suggestions.length > 0 && (
             <ul className="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-auto rounded-xl border border-[var(--line)] bg-white py-1 text-sm shadow-lg">
