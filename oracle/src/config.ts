@@ -13,6 +13,7 @@ export type Config = {
   pollIntervalMs: number;
   startBlock: bigint;
   scanChunkBlocks: bigint;
+  apiPort: number;
 };
 
 function requireEnv(name: string): string {
@@ -89,5 +90,6 @@ export function loadConfig(): Config {
       'SCAN_CHUNK_BLOCKS',
       process.env.SCAN_CHUNK_BLOCKS ?? '5000',
     ),
+    apiPort: parseInteger('ORACLE_API_PORT', process.env.ORACLE_API_PORT ?? '3001'),
   };
 }

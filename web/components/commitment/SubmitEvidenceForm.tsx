@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
 import type { Abi, Hex } from 'viem';
 import { procrastinotAbi } from '@procrastinot/abi';
@@ -81,6 +82,9 @@ export function SubmitEvidenceForm({
   const [txHash, setTxHash] = useState<Hex | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawResult, setWithdrawResult] = useState<'success' | 'error' | null>(null);
+  const router = useRouter();
   const pickerRef = useRef<HTMLInputElement | null>(null);
   const { writeContractAsync, isPending: writing } = useWriteContract();
   const rx = useWaitForTransactionReceipt({
@@ -264,6 +268,56 @@ export function SubmitEvidenceForm({
     } catch (error) {
       setErr(error instanceof Error ? error.message : 'Failed to submit evidence.');
     }
+  }
+
+  async function handleWithdraw() {
+    setWithdrawing(true);
+    try {
+      const res = await fetch('/api/withdraw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commitmentId: id.toString() }),
+      });
+      if (!res.ok) throw new Error('Withdraw request failed');
+      setWithdrawResult('success');
+    } catch {
+      setWithdrawResult('error');
+    } finally {
+      setWithdrawing(false);
+    }
+  }
+
+  if (rx.isSuccess) {
+    return (
+      <div className="pn-panel flex flex-col gap-4 rounded-2xl p-6">
+        <h2 className="text-xl font-bold text-[var(--success)]">Success</h2>
+        <p className="text-sm text-[var(--ink-1)]">
+          Your evidence is submitted. The oracle is judging — or you can act now.
+        </p>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => void handleWithdraw()}
+            disabled={withdrawing || withdrawResult !== null}
+            className="pn-btn pn-btn-primary"
+          >
+            {withdrawing ? 'Withdrawing…' : withdrawResult === 'success' ? 'Withdrawn!' : 'Withdraw'}
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push('/degen')}
+            className="pn-btn pn-btn-secondary"
+          >
+            Enter Degen Mode
+          </button>
+        </div>
+        {withdrawResult === 'error' && (
+          <p className="rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--line))] bg-[color-mix(in_srgb,var(--danger)_10%,white)] p-3 text-sm text-[var(--danger)]">
+            Withdraw failed. Try again.
+          </p>
+        )}
+      </div>
+    );
   }
 
   return (

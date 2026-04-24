@@ -3,6 +3,7 @@ import { openDb } from './db.js';
 import { createChainClients } from './chain.js';
 import { createJudge } from './judge.js';
 import { createPoller } from './poller.js';
+import { createApiServer } from './server.js';
 import { logger } from './logger.js';
 
 async function main(): Promise<void> {
@@ -51,6 +52,7 @@ async function main(): Promise<void> {
   });
 
   poller.start();
+  createApiServer(clients, config.apiPort);
 }
 
 void main();
