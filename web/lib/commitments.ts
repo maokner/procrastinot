@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { supabaseServer } from './supabase.js';
 import { supabaseAdmin } from './supabase-admin.js';
+import { CONTRACT_ADDRESS } from './contract.js';
 import type { Commitment, Profile, VerdictEvent } from './db-types.js';
 
 export type CommitmentWithProfiles = Commitment & {
@@ -30,6 +31,7 @@ export async function listMyCommitments(profileId: string, limit = 50) {
   const { data, error } = await sb
     .from('commitments')
     .select('*')
+    .eq('contract_address', CONTRACT_ADDRESS.toLowerCase())
     .or(`creator_profile.eq.${profileId},enemy_profile.eq.${profileId}`)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -43,6 +45,7 @@ export async function listInboxActive(profileId: string) {
   const { data, error } = await sb
     .from('commitments')
     .select('*')
+    .eq('contract_address', CONTRACT_ADDRESS.toLowerCase())
     .eq('enemy_profile', profileId)
     .eq('status', 'active')
     .order('deadline', { ascending: true });
@@ -56,6 +59,7 @@ export async function listInboxHistory(profileId: string, limit = 50) {
   const { data, error } = await sb
     .from('commitments')
     .select('*')
+    .eq('contract_address', CONTRACT_ADDRESS.toLowerCase())
     .eq('enemy_profile', profileId)
     .neq('status', 'active')
     .order('updated_at', { ascending: false })
@@ -71,6 +75,7 @@ export async function getCommitment(id: string | number): Promise<Commitment | n
     .from('commitments')
     .select('*')
     .eq('id', Number(id))
+    .eq('contract_address', CONTRACT_ADDRESS.toLowerCase())
     .maybeSingle();
   return (data as Commitment | null) ?? null;
 }
@@ -82,6 +87,7 @@ export async function listVerdictEvents(commitmentId: number): Promise<VerdictEv
     .from('verdict_events')
     .select('*')
     .eq('commitment_id', commitmentId)
+    .eq('commitment_contract_address', CONTRACT_ADDRESS.toLowerCase())
     .order('block_number', { ascending: true });
   if (error) throw error;
   return (data ?? []) as VerdictEvent[];
@@ -93,6 +99,7 @@ export async function getProfileStats(profileId: string) {
   const { data, error } = await sb
     .from('commitments')
     .select('status, stake')
+    .eq('contract_address', CONTRACT_ADDRESS.toLowerCase())
     .eq('creator_profile', profileId);
   if (error) throw error;
   const rows = (data ?? []) as Pick<Commitment, 'status' | 'stake'>[];
@@ -112,6 +119,7 @@ export async function listPublicCommitments(profileId: string, limit = 50) {
   const { data, error } = await sb
     .from('commitments')
     .select('*')
+    .eq('contract_address', CONTRACT_ADDRESS.toLowerCase())
     .eq('creator_profile', profileId)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -125,6 +133,7 @@ export async function getEnemyStats(profileId: string) {
   const { data, error } = await sb
     .from('commitments')
     .select('status, stake')
+    .eq('contract_address', CONTRACT_ADDRESS.toLowerCase())
     .eq('enemy_profile', profileId);
   if (error) throw error;
   const rows = (data ?? []) as Pick<Commitment, 'status' | 'stake'>[];

@@ -25,6 +25,7 @@ export type Wallet = {
 
 export type Commitment = {
   id: number;
+  contract_address: string;
   creator_profile: string | null;
   creator_address: string;
   enemy_profile: string | null;
@@ -46,6 +47,7 @@ export type Commitment = {
 export type VerdictEvent = {
   id: number;
   commitment_id: number | null;
+  commitment_contract_address: string | null;
   kind: VerdictEventKind;
   attempt: number | null;
   passed: boolean | null;

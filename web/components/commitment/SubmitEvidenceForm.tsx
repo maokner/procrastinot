@@ -1,7 +1,6 @@
 'use client';
 
 import { useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
 import { useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
 import type { Abi, Hex } from 'viem';
 import { procrastinotAbi } from '@procrastinot/abi';
@@ -82,11 +81,6 @@ export function SubmitEvidenceForm({
   const [txHash, setTxHash] = useState<Hex | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [withdrawing, setWithdrawing] = useState(false);
-  const [enteringDegen, setEnteringDegen] = useState(false);
-  const [withdrawResult, setWithdrawResult] = useState<'success' | 'error' | null>(null);
-  const [degenError, setDegenError] = useState<string | null>(null);
-  const router = useRouter();
   const pickerRef = useRef<HTMLInputElement | null>(null);
   const { writeContractAsync, isPending: writing } = useWriteContract();
   const rx = useWaitForTransactionReceipt({
@@ -272,79 +266,22 @@ export function SubmitEvidenceForm({
     }
   }
 
-  async function handleWithdraw() {
-    setWithdrawing(true);
-    setDegenError(null);
-    try {
-      const res = await fetch('/api/withdraw', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commitmentId: id.toString() }),
-      });
-      if (!res.ok) throw new Error('Withdraw request failed');
-      setWithdrawResult('success');
-    } catch {
-      setWithdrawResult('error');
-    } finally {
-      setWithdrawing(false);
-    }
-  }
-
-  async function handleDegenMode() {
-    setEnteringDegen(true);
-    setDegenError(null);
-    try {
-      const res = await fetch('/api/degen', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commitmentId: id.toString() }),
-      });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(data?.error ?? 'Degen mode entry failed');
-      }
-      router.push('/degen');
-    } catch (error) {
-      setDegenError(error instanceof Error ? error.message : 'Degen mode entry failed');
-    } finally {
-      setEnteringDegen(false);
-    }
-  }
-
   if (rx.isSuccess) {
     return (
       <div className="pn-panel flex flex-col gap-4 rounded-2xl p-6">
-        <h2 className="text-xl font-bold text-[var(--success)]">Success</h2>
+        <h2 className="text-xl font-bold text-[var(--success)]">Evidence submitted</h2>
         <p className="text-sm text-[var(--ink-1)]">
-          Your evidence is submitted. The oracle is judging — or you can act now.
+          The oracle is judging this attempt. This page updates automatically when the verdict lands.
         </p>
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => void handleWithdraw()}
-            disabled={withdrawing || withdrawResult !== null}
-            className="pn-btn pn-btn-primary"
+        {txHash && (
+          <a
+            href={etherscanTxUrl(txHash, CHAIN_ID)}
+            target="_blank"
+            rel="noreferrer"
+            className="pn-btn pn-btn-secondary self-start text-sm"
           >
-            {withdrawing ? 'Withdrawing…' : withdrawResult === 'success' ? 'Withdrawn!' : 'Withdraw'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleDegenMode()}
-            disabled={enteringDegen || withdrawResult !== null}
-            className="pn-btn pn-btn-secondary"
-          >
-            {enteringDegen ? 'Entering…' : 'Enter Degen Mode'}
-          </button>
-        </div>
-        {degenError && (
-          <p className="rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--line))] bg-[color-mix(in_srgb,var(--danger)_10%,white)] p-3 text-sm text-[var(--danger)]">
-            {degenError}
-          </p>
-        )}
-        {withdrawResult === 'error' && (
-          <p className="rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--line))] bg-[color-mix(in_srgb,var(--danger)_10%,white)] p-3 text-sm text-[var(--danger)]">
-            Withdraw failed. Try again.
-          </p>
+            View transaction
+          </a>
         )}
       </div>
     );

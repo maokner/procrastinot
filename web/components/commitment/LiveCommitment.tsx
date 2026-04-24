@@ -63,7 +63,11 @@ export function LiveCommitment({
           filter: `id=eq.${initial.id}`,
         },
         (payload) => {
-          setCommitment(payload.new as Commitment);
+          const next = payload.new as Commitment;
+          if (next.contract_address?.toLowerCase() !== initial.contract_address.toLowerCase()) {
+            return;
+          }
+          setCommitment(next);
         },
       )
       .on(
@@ -77,6 +81,12 @@ export function LiveCommitment({
         (payload) => {
           setEvents((prev) => {
             const ev = payload.new as VerdictEvent;
+            if (
+              ev.commitment_contract_address?.toLowerCase() !==
+              initial.contract_address.toLowerCase()
+            ) {
+              return prev;
+            }
             if (prev.some((e) => e.id === ev.id)) return prev;
             return [...prev, ev].sort((a, b) => a.block_number - b.block_number);
           });

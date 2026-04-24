@@ -85,6 +85,7 @@ export function createDb(config: Config): IndexerDb {
     // These are server-to-server calls only.
     global: { headers: { 'X-Client-Info': 'procrastinot-indexer' } },
   });
+  const contractAddress = lc(config.contractAddress);
 
   // ----- cursor ----------------------------------------------------------
   async function getCursor(): Promise<bigint | null> {
@@ -143,6 +144,7 @@ export function createDb(config: Config): IndexerDb {
       .from('commitments')
       .select('id, creator_profile, creator_address, enemy_profile, enemy_address')
       .or('creator_profile.is.null,enemy_profile.is.null')
+      .eq('contract_address', contractAddress)
       .limit(500);
     if (error) {
       logger.warn({ err: error.message }, 'db.reresolve.fetchFailed');
@@ -165,7 +167,8 @@ export function createDb(config: Config): IndexerDb {
       const { error: updErr } = await client
         .from('commitments')
         .update(patch)
-        .eq('id', row.id);
+        .eq('id', row.id)
+        .eq('contract_address', contractAddress);
       if (updErr) {
         logger.warn({ err: updErr.message, id: row.id }, 'db.reresolve.updateFailed');
         continue;
@@ -197,6 +200,7 @@ export function createDb(config: Config): IndexerDb {
       .from('verdict_events')
       .select('id')
       .eq('commitment_id', Number(row.commitment_id))
+      .eq('commitment_contract_address', contractAddress)
       .eq('kind', row.kind)
       .eq('tx_hash', row.tx_hash)
       .limit(1);
@@ -210,6 +214,7 @@ export function createDb(config: Config): IndexerDb {
     }
     const { error } = await client.from('verdict_events').insert({
       commitment_id: Number(row.commitment_id),
+      commitment_contract_address: contractAddress,
       kind: row.kind,
       attempt: row.attempt,
       passed: row.passed,
@@ -232,6 +237,7 @@ export function createDb(config: Config): IndexerDb {
     const oracleFeeStr = fmtUsdc(ev.oracleFee);
     const row = {
       id: Number(ev.id),
+      contract_address: contractAddress,
       creator_address: lc(ev.user),
       creator_profile: creatorProfile,
       enemy_address: lc(ev.enemy),
@@ -273,6 +279,7 @@ export function createDb(config: Config): IndexerDb {
       .from('commitments')
       .select('oracle_fee_init')
       .eq('id', Number(ev.id))
+      .eq('contract_address', contractAddress)
       .maybeSingle();
     if (error) throw new Error(`verdictRequested select: ${error.message}`);
     if (!data) {
@@ -300,7 +307,8 @@ export function createDb(config: Config): IndexerDb {
         oracle_fee_remain: remainStr,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', Number(ev.id));
+      .eq('id', Number(ev.id))
+      .eq('contract_address', contractAddress);
     if (updErr) throw new Error(`verdictRequested update: ${updErr.message}`);
 
     await insertVerdictEventIdempotent({
@@ -345,7 +353,8 @@ export function createDb(config: Config): IndexerDb {
         tx_hash_resolved: ev.txHash,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', Number(ev.id));
+      .eq('id', Number(ev.id))
+      .eq('contract_address', contractAddress);
     if (error) throw new Error(`completed update: ${error.message}`);
   }
 
@@ -358,7 +367,8 @@ export function createDb(config: Config): IndexerDb {
         tx_hash_resolved: ev.txHash,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', Number(ev.id));
+      .eq('id', Number(ev.id))
+      .eq('contract_address', contractAddress);
     if (error) throw new Error(`forfeited update: ${error.message}`);
 
     await insertVerdictEventIdempotent({
