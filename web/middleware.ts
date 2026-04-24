@@ -17,6 +17,7 @@ const PROTECTED_PREFIXES = [
   '/settings',
   '/profile',
   '/onboarding',
+  '/degen',
 ];
 
 function matchesProtectedPath(pathname: string): boolean {
@@ -108,5 +109,6 @@ export const config = {
     '/settings/:path*',
     '/profile/:path*',
     '/onboarding/:path*',
+    '/degen/:path*',
   ],
 };

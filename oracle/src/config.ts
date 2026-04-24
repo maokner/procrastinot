@@ -6,6 +6,7 @@ export type Config = {
   chain: 'sepolia' | 'mainnet';
   oraclePrivateKey: Hex;
   contractAddress: `0x${string}`;
+  degenVaultAddress: `0x${string}`;
   openaiApiKey: string;
   openaiModel: string;
   supabaseUrl: string;
@@ -80,6 +81,10 @@ export function loadConfig(): Config {
     chain: chainRaw,
     oraclePrivateKey: parseHex('ORACLE_PRIVATE_KEY', requireEnv('ORACLE_PRIVATE_KEY')),
     contractAddress: parseAddress('CONTRACT_ADDRESS', requireEnv('CONTRACT_ADDRESS')),
+    degenVaultAddress: parseAddress(
+      'DEGEN_VAULT_ADDRESS',
+      requireEnv('DEGEN_VAULT_ADDRESS'),
+    ),
     openaiApiKey: requireEnv('OPENAI_API_KEY'),
     openaiModel: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
     supabaseUrl: requireEnv('SUPABASE_URL'),

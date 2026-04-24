@@ -62,6 +62,45 @@ export type IndexerCursor = {
   updated_at: string;
 };
 
+export type DegenBalance = {
+  user_id: string;
+  balance_usdc: number;
+  deposited_usdc: number;
+  drop_count: number;
+  updated_at: string;
+};
+
+export type PlinkoDrop = {
+  id: string;
+  user_id: string;
+  ball_value_usdc: number;
+  rows: number;
+  slot: number;
+  path: string;
+  multiplier: string;
+  payout_usdc: number;
+  balance_before: number;
+  balance_after: number;
+  server_seed: string;
+  server_seed_hash: string;
+  client_seed: string;
+  nonce: number;
+  created_at: string;
+};
+
+export type DegenSession = {
+  id: string;
+  user_id: string;
+  wallet_address: string;
+  commitment_id: number;
+  deposited_usdc: number;
+  deposit_tx_hash: string;
+  deposited_at: string;
+  cashed_out_usdc: number | null;
+  cashout_tx_hash: string | null;
+  cashed_out_at: string | null;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -90,6 +129,27 @@ export type Database = {
         Insert: Omit<IndexerCursor, 'updated_at'> & { updated_at?: string };
         Update: Partial<Omit<IndexerCursor, 'id'>>;
       };
+      degen_balances: {
+        Row: DegenBalance;
+        Insert: DegenBalance;
+        Update: Partial<Omit<DegenBalance, 'user_id'>>;
+      };
+      plinko_drops: {
+        Row: PlinkoDrop;
+        Insert: Omit<PlinkoDrop, 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Update: Partial<Omit<PlinkoDrop, 'id' | 'user_id'>>;
+      };
+      degen_sessions: {
+        Row: DegenSession;
+        Insert: Omit<DegenSession, 'id' | 'deposited_at' | 'cashed_out_usdc' | 'cashout_tx_hash' | 'cashed_out_at'> & {
+          id?: string;
+          deposited_at?: string;
+          cashed_out_usdc?: number | null;
+          cashout_tx_hash?: string | null;
+          cashed_out_at?: string | null;
+        };
+        Update: Partial<Omit<DegenSession, 'id' | 'user_id'>>;
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -100,6 +160,27 @@ export type Database = {
       search_usernames: {
         Args: { q: string; lim?: number };
         Returns: { username: string; display_name: string | null; avatar_url: string | null }[];
+      };
+      process_plinko_drop: {
+        Args: {
+          p_user_id: string;
+          p_ball_value_usdc: number;
+          p_rows: number;
+          p_slot: number;
+          p_path: string;
+          p_multiplier: number;
+          p_payout_usdc: number;
+          p_server_seed: string;
+          p_server_seed_hash: string;
+          p_client_seed: string;
+          p_nonce: number;
+        };
+        Returns: {
+          drop_id: string;
+          balance_before: number;
+          balance_after: number;
+          new_drop_count: number;
+        }[];
       };
     };
     Enums: Record<string, never>;

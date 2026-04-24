@@ -4,6 +4,7 @@ import { createChainClients } from './chain.js';
 import { createJudge } from './judge.js';
 import { createPoller } from './poller.js';
 import { createApiServer } from './server.js';
+import { createSupabaseAdminClient } from './supabase.js';
 import { logger } from './logger.js';
 
 async function main(): Promise<void> {
@@ -17,6 +18,10 @@ async function main(): Promise<void> {
   }
 
   const db = openDb({
+    supabaseUrl: config.supabaseUrl,
+    supabaseServiceRoleKey: config.supabaseServiceRoleKey,
+  });
+  const supabase = createSupabaseAdminClient({
     supabaseUrl: config.supabaseUrl,
     supabaseServiceRoleKey: config.supabaseServiceRoleKey,
   });
@@ -52,7 +57,7 @@ async function main(): Promise<void> {
   });
 
   poller.start();
-  createApiServer(clients, config.apiPort);
+  createApiServer(clients, supabase, config.apiPort);
 }
 
 void main();

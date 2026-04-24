@@ -11,6 +11,9 @@ export const PROCRASTINOT_SEPOLIA_V1: `0x${string}` | '' = '0xaE8303EC8465A888E1
 // https://sepolia.etherscan.io/address/0x25df2268051203cf73beb8cd9cd55c313370fb26
 export const PROCRASTINOT_SEPOLIA: `0x${string}` | '' = '0x25DF2268051203cf73beb8cD9Cd55c313370FB26';
 
+// Set after deploying the vault-enabled contract pair.
+export const DEGEN_VAULT_ADDRESS: `0x${string}` | '' = '';
+
 // Block at which the v2 contract was deployed. Indexers and log-scan backfills
 // should start from this block (or later) to avoid reading pre-deploy history.
 export const PROCRASTINOT_DEPLOY_BLOCK: bigint = 10694179n;

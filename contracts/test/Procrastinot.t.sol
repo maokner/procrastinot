@@ -3,12 +3,14 @@ pragma solidity 0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {Ownable} from "@openzeppelin/access/Ownable.sol";
+import {DegenVault} from "../src/DegenVault.sol";
 import {Procrastinot} from "../src/Procrastinot.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
 import {MaliciousToken} from "./mocks/MaliciousToken.sol";
 
 contract ProcrastinotTest is Test {
     Procrastinot internal p;
+    DegenVault internal vault;
     MockUSDC internal usdc;
 
     address internal user = makeAddr("user");
@@ -36,10 +38,14 @@ contract ProcrastinotTest is Test {
     event VerdictSubmitted(uint256 indexed id, bool passed, bytes32 reasonHash);
     event Completed(uint256 indexed id, address indexed user, uint128 refund);
     event Forfeited(uint256 indexed id, address indexed enemy, uint128 amount);
+    event DegenVaultUpdated(address indexed oldVault, address indexed newVault);
+    event SentToDegenVault(uint256 indexed id, address indexed user, address indexed vault, uint128 amount);
 
     function setUp() public {
         usdc = new MockUSDC();
         p = new Procrastinot(address(usdc), oracle, operator);
+        vault = new DegenVault(address(usdc), address(p), oracle);
+        p.setDegenVault(address(vault));
 
         deadline = uint64(block.timestamp + 7 days);
 
@@ -223,6 +229,74 @@ contract ProcrastinotTest is Test {
         assertEq(usdc.balanceOf(address(p)), cBefore);
     }
 
+    function testSubmitVerdictToVaultOnlyOracle() public {
+        uint256 id = _createDefault();
+        vm.prank(rando);
+        vm.expectRevert(Procrastinot.NotOracle.selector);
+        p.submitVerdictToVault(id, bytes32(uint256(1)));
+    }
+
+    function testSubmitVerdictToVaultRequiresVault() public {
+        Procrastinot p2 = new Procrastinot(address(usdc), oracle, operator);
+
+        vm.prank(user);
+        usdc.approve(address(p2), type(uint256).max);
+
+        vm.prank(user);
+        uint256 id = p2.create(enemy, STAKE, FEE, deadline, "write essay", "must be 500 words");
+
+        vm.prank(oracle);
+        vm.expectRevert(Procrastinot.DegenVaultNotSet.selector);
+        p2.submitVerdictToVault(id, bytes32(uint256(1)));
+    }
+
+    function testSubmitVerdictToVaultRoutesStakeToVaultAndFeeToOperator() public {
+        uint256 id = _createDefault();
+
+        vm.prank(user);
+        p.requestVerdict(id, "ipfs://e");
+
+        uint256 userBefore = usdc.balanceOf(user);
+        uint256 opBefore = usdc.balanceOf(operator);
+        Procrastinot.Commitment memory cBefore = p.getCommitment(id);
+        uint128 remainingFee = cBefore.oracleFee;
+
+        vm.expectEmit(true, true, true, true, address(p));
+        emit SentToDegenVault(id, user, address(vault), STAKE);
+        vm.expectEmit(true, true, false, true, address(p));
+        emit Completed(id, user, 0);
+
+        vm.prank(oracle);
+        p.submitVerdictToVault(id, bytes32(uint256(0xCAFE)));
+
+        assertEq(usdc.balanceOf(user), userBefore);
+        assertEq(usdc.balanceOf(operator), opBefore + remainingFee);
+        assertEq(usdc.balanceOf(address(vault)), STAKE);
+        assertEq(vault.depositedBalances(user), STAKE);
+        assertEq(vault.totalHeld(), STAKE);
+        assertEq(usdc.allowance(address(p), address(vault)), 0);
+
+        Procrastinot.Commitment memory c = p.getCommitment(id);
+        assertEq(uint8(c.status), uint8(Procrastinot.Status.Completed));
+        assertEq(c.stake, 0);
+        assertEq(c.oracleFee, 0);
+    }
+
+    function testSubmitVerdictToVaultThenOracleCanReleaseFromVault() public {
+        uint256 id = _createDefault();
+
+        vm.prank(oracle);
+        p.submitVerdictToVault(id, bytes32(uint256(0xCAFE)));
+
+        uint256 userBefore = usdc.balanceOf(user);
+
+        vm.prank(oracle);
+        vault.releaseFor(user, STAKE);
+
+        assertEq(usdc.balanceOf(user), userBefore + STAKE);
+        assertEq(vault.depositedBalances(user), STAKE);
+    }
+
     // ---------------------------------------------------------------
     // 5. Double resolve
     // ---------------------------------------------------------------
@@ -368,6 +442,33 @@ contract ProcrastinotTest is Test {
         address newOperator = makeAddr("newOperator");
         p.setOperatorWallet(newOperator);
         assertEq(p.operatorWallet(), newOperator);
+    }
+
+    function testSetDegenVaultRejectsZeroAddress() public {
+        vm.expectRevert(Procrastinot.InvalidDegenVault.selector);
+        p.setDegenVault(address(0));
+    }
+
+    function testSetDegenVaultRejectsEOA() public {
+        vm.expectRevert(Procrastinot.InvalidDegenVault.selector);
+        p.setDegenVault(makeAddr("notVault"));
+    }
+
+    function testSetDegenVaultRejectsWrongProcrastinot() public {
+        DegenVault wrongVault = new DegenVault(address(usdc), makeAddr("otherProcrastinot"), oracle);
+
+        vm.expectRevert(Procrastinot.InvalidDegenVault.selector);
+        p.setDegenVault(address(wrongVault));
+    }
+
+    function testSetDegenVaultHappyPath() public {
+        DegenVault newVault = new DegenVault(address(usdc), address(p), oracle);
+
+        vm.expectEmit(true, true, false, true, address(p));
+        emit DegenVaultUpdated(address(vault), address(newVault));
+
+        p.setDegenVault(address(newVault));
+        assertEq(address(p.degenVault()), address(newVault));
     }
 
     // ---------------------------------------------------------------

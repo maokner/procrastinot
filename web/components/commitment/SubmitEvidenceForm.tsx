@@ -83,7 +83,9 @@ export function SubmitEvidenceForm({
   const [err, setErr] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
+  const [enteringDegen, setEnteringDegen] = useState(false);
   const [withdrawResult, setWithdrawResult] = useState<'success' | 'error' | null>(null);
+  const [degenError, setDegenError] = useState<string | null>(null);
   const router = useRouter();
   const pickerRef = useRef<HTMLInputElement | null>(null);
   const { writeContractAsync, isPending: writing } = useWriteContract();
@@ -272,6 +274,7 @@ export function SubmitEvidenceForm({
 
   async function handleWithdraw() {
     setWithdrawing(true);
+    setDegenError(null);
     try {
       const res = await fetch('/api/withdraw', {
         method: 'POST',
@@ -284,6 +287,27 @@ export function SubmitEvidenceForm({
       setWithdrawResult('error');
     } finally {
       setWithdrawing(false);
+    }
+  }
+
+  async function handleDegenMode() {
+    setEnteringDegen(true);
+    setDegenError(null);
+    try {
+      const res = await fetch('/api/degen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commitmentId: id.toString() }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(data?.error ?? 'Degen mode entry failed');
+      }
+      router.push('/degen');
+    } catch (error) {
+      setDegenError(error instanceof Error ? error.message : 'Degen mode entry failed');
+    } finally {
+      setEnteringDegen(false);
     }
   }
 
@@ -305,12 +329,18 @@ export function SubmitEvidenceForm({
           </button>
           <button
             type="button"
-            onClick={() => router.push('/degen')}
+            onClick={() => void handleDegenMode()}
+            disabled={enteringDegen || withdrawResult !== null}
             className="pn-btn pn-btn-secondary"
           >
-            Enter Degen Mode
+            {enteringDegen ? 'Entering…' : 'Enter Degen Mode'}
           </button>
         </div>
+        {degenError && (
+          <p className="rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--line))] bg-[color-mix(in_srgb,var(--danger)_10%,white)] p-3 text-sm text-[var(--danger)]">
+            {degenError}
+          </p>
+        )}
         {withdrawResult === 'error' && (
           <p className="rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--line))] bg-[color-mix(in_srgb,var(--danger)_10%,white)] p-3 text-sm text-[var(--danger)]">
             Withdraw failed. Try again.

@@ -7,6 +7,12 @@ import {ReentrancyGuard} from "@openzeppelin/utils/ReentrancyGuard.sol";
 import {Ownable} from "@openzeppelin/access/Ownable.sol";
 import {Ownable2Step} from "@openzeppelin/access/Ownable2Step.sol";
 
+interface IDegenVault {
+    function usdc() external view returns (IERC20);
+    function procrastinot() external view returns (address);
+    function depositFor(address user, uint256 commitmentId, uint256 amount) external;
+}
+
 /// @title Procrastinot
 /// @notice On-chain commitment contract. A user stakes USDC against a deadline;
 ///         an oracle verifies whether the task was done. On success the user gets
@@ -50,6 +56,7 @@ contract Procrastinot is ReentrancyGuard, Ownable2Step {
     IERC20 public immutable usdc;
     address public oracle;
     address public operatorWallet;
+    IDegenVault public degenVault;
 
     uint256 public nextId;
     mapping(uint256 => Commitment) private _commitments;
@@ -69,6 +76,8 @@ contract Procrastinot is ReentrancyGuard, Ownable2Step {
     error BadEnemy();
     error InvalidOracle();
     error InvalidOperator();
+    error InvalidDegenVault();
+    error DegenVaultNotSet();
 
     // ---------------------------------------------------------------------
     // Events
@@ -88,6 +97,8 @@ contract Procrastinot is ReentrancyGuard, Ownable2Step {
     event VerdictSubmitted(uint256 indexed id, bool passed, bytes32 reasonHash);
     event Completed(uint256 indexed id, address indexed user, uint128 refund);
     event Forfeited(uint256 indexed id, address indexed enemy, uint128 amount);
+    event DegenVaultUpdated(address indexed oldVault, address indexed newVault);
+    event SentToDegenVault(uint256 indexed id, address indexed user, address indexed vault, uint128 amount);
 
     event OracleUpdated(address indexed oldOracle, address indexed newOracle);
     event OperatorWalletUpdated(address indexed oldOperator, address indexed newOperator);
@@ -190,6 +201,41 @@ contract Procrastinot is ReentrancyGuard, Ownable2Step {
         }
     }
 
+    /// @notice Oracle submits a passing verdict and sends the stake to the DegenVault.
+    ///         Remaining oracleFee still goes to the operator wallet.
+    function submitVerdictToVault(uint256 id, bytes32 reasonHash) external nonReentrant {
+        if (msg.sender != oracle) revert NotOracle();
+
+        IDegenVault vault = degenVault;
+        address vaultAddress = address(vault);
+        if (vaultAddress == address(0)) revert DegenVaultNotSet();
+
+        Commitment storage c = _commitments[id];
+        if (c.status != Status.Active) revert NotActive();
+
+        uint128 stakeAmount = c.stake;
+        uint128 remainingFee = c.oracleFee;
+        address user = c.user;
+
+        c.stake = 0;
+        c.oracleFee = 0;
+        c.status = Status.Completed;
+
+        emit VerdictSubmitted(id, true, reasonHash);
+
+        if (remainingFee > 0) {
+            usdc.safeTransfer(operatorWallet, remainingFee);
+        }
+        if (stakeAmount > 0) {
+            usdc.forceApprove(vaultAddress, stakeAmount);
+            vault.depositFor(user, id, stakeAmount);
+            usdc.forceApprove(vaultAddress, 0);
+        }
+
+        emit SentToDegenVault(id, user, vaultAddress, stakeAmount);
+        emit Completed(id, user, 0);
+    }
+
     /// @notice Permissionless forfeit after the deadline. Sends the stake to
     ///         the enemy; any unspent oracleFee goes to the operator wallet
     ///         (the oracle budget is never meant to reward the enemy).
@@ -238,5 +284,28 @@ contract Procrastinot is ReentrancyGuard, Ownable2Step {
         if (newOperator == address(0)) revert InvalidOperator();
         emit OperatorWalletUpdated(operatorWallet, newOperator);
         operatorWallet = newOperator;
+    }
+
+    function setDegenVault(address newVault) external onlyOwner {
+        _validateDegenVault(newVault);
+        emit DegenVaultUpdated(address(degenVault), newVault);
+        degenVault = IDegenVault(newVault);
+    }
+
+    function _validateDegenVault(address newVault) private view {
+        if (newVault == address(0) || newVault.code.length == 0) revert InvalidDegenVault();
+
+        IDegenVault vault = IDegenVault(newVault);
+        try vault.usdc() returns (IERC20 vaultUsdc) {
+            if (address(vaultUsdc) != address(usdc)) revert InvalidDegenVault();
+        } catch {
+            revert InvalidDegenVault();
+        }
+
+        try vault.procrastinot() returns (address vaultProcrastinot) {
+            if (vaultProcrastinot != address(this)) revert InvalidDegenVault();
+        } catch {
+            revert InvalidDegenVault();
+        }
     }
 }

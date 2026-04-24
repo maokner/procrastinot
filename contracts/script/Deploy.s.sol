@@ -2,6 +2,7 @@
 pragma solidity 0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
+import {DegenVault} from "../src/DegenVault.sol";
 import {Procrastinot} from "../src/Procrastinot.sol";
 
 /// @notice Deploy Procrastinot to Sepolia (or any EVM chain).
@@ -14,7 +15,7 @@ contract Deploy is Script {
     // Sepolia USDC (Circle v1, 6 decimals)
     address internal constant USDC_SEPOLIA_DEFAULT = 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238;
 
-    function run() external returns (Procrastinot deployed) {
+    function run() external returns (Procrastinot deployed, DegenVault vault) {
         address usdc = vm.envOr("USDC_ADDRESS", USDC_SEPOLIA_DEFAULT);
         address oracle = vm.envAddress("ORACLE_ADDRESS");
         address operator = vm.envAddress("OPERATOR_ADDRESS");
@@ -27,6 +28,8 @@ contract Deploy is Script {
         }
 
         deployed = new Procrastinot(usdc, oracle, operator);
+        vault = new DegenVault(usdc, address(deployed), oracle);
+        deployed.setDegenVault(address(vault));
 
         vm.stopBroadcast();
 
@@ -34,5 +37,6 @@ contract Deploy is Script {
         console2.log("Oracle     :", oracle);
         console2.log("Operator   :", operator);
         console2.log("Procrastinot deployed at:", address(deployed));
+        console2.log("DegenVault deployed at  :", address(vault));
     }
 }
