@@ -1,8 +1,8 @@
-# Procrastinot Indexer
+# Indexer
 
-A long-running Node service that mirrors Procrastinot v2 contract events
-into Supabase Postgres so the web UI can read from the DB (fast) instead
-of the chain (slow).
+A long-running Node service that mirrors Procrastinot contract events into
+Supabase Postgres so the web UI can read from the database instead of the
+chain.
 
 The indexer is a strict **read-follower**. It holds the Supabase
 service-role key but no chain-signing key — if compromised, an attacker
@@ -17,8 +17,8 @@ All are required unless noted. See `.env.example` for defaults.
 | --- | --- |
 | `RPC_URL` | Sepolia JSON-RPC endpoint. |
 | `CHAIN` | `sepolia` or `mainnet`. Defaults to `sepolia`. |
-| `CONTRACT_ADDRESS` | Procrastinot v2 contract on the target chain (e.g. `0x25DF2268051203cf73beb8cD9Cd55c313370FB26` on Sepolia). |
-| `START_BLOCK` | Block to begin backfill from on first run. Use the deploy block (e.g. `10694179`). |
+| `CONTRACT_ADDRESS` | Procrastinot contract on the target chain. |
+| `START_BLOCK` | Block to begin backfill from on first run. Use the deploy block. |
 | `POLL_INTERVAL_MS` | Steady-state poll cadence in ms. `5000` is fine on Sepolia. |
 | `BACKFILL_CHUNK` | `getLogs` window size in blocks. Public RPCs cap at ~5000. |
 | `SUPABASE_URL` | e.g. `https://<project>.supabase.co`. |
@@ -66,8 +66,8 @@ docker run --rm --env-file indexer/.env procrastinot-indexer
 * **Cursor discipline.** The cursor is written *after* a chunk is fully
   processed. A crash mid-chunk means the chunk will be re-processed on
   restart — which is safe.
-* **`commitments` upsert.** Keyed by `id` (uint256 → bigint). Replay of
-  the same `CommitmentCreated` log overwrites the same row.
+* **`commitments` upsert.** Keyed by contract address and commitment id.
+  Replay of the same `CommitmentCreated` log overwrites the same row.
 * **`verdict_events` inserts.** Before inserting, the indexer SELECTs by
   `(commitment_id, kind, tx_hash)` and skips if present. (The schema
   does not have a unique index for this; we intentionally avoid adding

@@ -1,6 +1,7 @@
 {
   "name": "procrastinot",
   "private": true,
+  "description": "On-chain commitment app with oracle-judged evidence and Degen Mode escrow.",
   "packageManager": "pnpm@9.12.0",
   "scripts": {
     "dev:oracle": "pnpm --filter oracle dev",
