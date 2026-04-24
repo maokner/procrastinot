@@ -2,7 +2,7 @@ import { createHash, createHmac, randomBytes } from 'crypto';
 import { NextResponse, type NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { requireProfile } from '@/lib/auth';
-import { supabaseServer } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import {
   MAX_BET_UNITS,
   MIN_BET_UNITS,
@@ -60,9 +60,9 @@ export async function POST(request: NextRequest) {
   const payoutUnits = (ballValueUnits * BigInt(Math.round(multiplier * 10_000))) / 10_000n;
   const serverSeedHash = createHash('sha256').update(serverSeedBuffer).digest('hex');
 
-  const supabase = supabaseServer(cookieJar);
+  const admin = supabaseAdmin();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase.rpc as any)('process_plinko_drop', {
+  const { data, error } = await (admin.rpc as any)('process_plinko_drop', {
     p_user_id: profile.id,
     p_ball_value_usdc: Number(ballValueUnits),
     p_rows: rows,
@@ -83,7 +83,8 @@ export async function POST(request: NextRequest) {
     if (error.message.includes('no_balance')) {
       return NextResponse.json({ error: 'No active degen balance' }, { status: 404 });
     }
-    return NextResponse.json({ error: 'Drop failed' }, { status: 500 });
+    console.error('[plinko/drop] RPC error:', error);
+    return NextResponse.json({ error: 'Drop failed', detail: error.message }, { status: 500 });
   }
 
   const result = data?.[0] as
