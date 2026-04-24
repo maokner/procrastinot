@@ -170,7 +170,7 @@ export function createApiServer(
 
       try {
         const commitment = await getCommitment(clients, commitmentId);
-        await requirePassedOracleVerdict(supabase, {
+        const passedAttempt = await requirePassedOracleVerdict(supabase, {
           contractAddress: clients.contractAddress,
           commitmentId,
         });
@@ -190,6 +190,15 @@ export function createApiServer(
           commitmentId,
           passed: true,
           reasonHash,
+        });
+
+        await markApiVerdictSubmitted(supabase, {
+          contractAddress: clients.contractAddress,
+          commitmentId,
+          attemptNumber: passedAttempt,
+          passed: true,
+          reason: 'oracle-withdraw',
+          txHash,
         });
 
         logger.info({ commitmentId: commitmentId.toString(), txHash }, 'oracle.withdraw.success');

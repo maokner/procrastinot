@@ -263,11 +263,23 @@ export function createPoller(args: {
 
     const reasonHash: Hex = keccak256(toBytes(verdict.reason));
 
+    if (verdict.passed) {
+      await db.markVerdictSubmitted({
+        commitment_id: commitmentIdStr,
+        attempt_number: attemptNumber,
+        passed: true,
+        reason: verdict.reason,
+        tx_hash: null,
+      });
+      log.info({ passed: true }, 'poller.verdict.passed.awaitingUserSettlement');
+      return;
+    }
+
     let txHash: Hex;
     try {
       txHash = await submitVerdict(clients, {
         commitmentId,
-        passed: verdict.passed,
+        passed: false,
         reasonHash,
       });
     } catch (err) {
@@ -304,11 +316,11 @@ export function createPoller(args: {
     await db.markVerdictSubmitted({
       commitment_id: commitmentIdStr,
       attempt_number: attemptNumber,
-      passed: verdict.passed,
+      passed: false,
       reason: verdict.reason,
       tx_hash: txHash,
     });
-    log.info({ txHash, passed: verdict.passed }, 'poller.submitVerdict.sent');
+    log.info({ txHash, passed: false }, 'poller.submitVerdict.sent');
   }
 
   async function tick(): Promise<void> {

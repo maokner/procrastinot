@@ -7,6 +7,7 @@ import {
 } from '@/lib/commitments';
 import { LiveCommitment } from '@/components/commitment/LiveCommitment';
 import { CHAIN_ID } from '@/lib/contract';
+import { getPassedOracleVerdict } from '@/lib/oracle-verdicts';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,10 +56,13 @@ export default async function CommitmentPage({
     );
   }
 
-  const events = await listVerdictEvents(idNum);
-  const profileMap = await profilesByIds([
-    commitment.creator_profile,
-    commitment.enemy_profile,
+  const [events, passedVerdict, profileMap] = await Promise.all([
+    listVerdictEvents(idNum),
+    getPassedOracleVerdict(idNum),
+    profilesByIds([
+      commitment.creator_profile,
+      commitment.enemy_profile,
+    ]),
   ]);
   const creator = commitment.creator_profile
     ? profileMap.get(commitment.creator_profile)
@@ -76,6 +80,7 @@ export default async function CommitmentPage({
         enemyUsername={enemy?.username ?? null}
         viewerProfileId={viewer?.id ?? null}
         chainId={CHAIN_ID}
+        initialPassedVerdict={passedVerdict}
       />
     </Shell>
   );

@@ -10,6 +10,7 @@ import { DeadlineCountdown } from './DeadlineCountdown';
 import { SubmitEvidenceForm } from './SubmitEvidenceForm';
 import { ForfeitButton, ClaimButton } from './ForfeitButton';
 import { VerdictLog } from './VerdictLog';
+import type { PassedOracleVerdict } from '@/lib/oracle-verdicts';
 
 const STATUS_CLASS: Record<string, string> = {
   active: 'border-black bg-black text-white',
@@ -30,6 +31,7 @@ type Props = {
   enemyUsername: string | null;
   viewerProfileId: string | null;
   chainId: number;
+  initialPassedVerdict: PassedOracleVerdict | null;
 };
 
 /**
@@ -44,11 +46,18 @@ export function LiveCommitment({
   enemyUsername,
   viewerProfileId,
   chainId,
+  initialPassedVerdict,
 }: Props) {
   const { address } = useAccount();
   const router = useRouter();
   const [commitment, setCommitment] = useState<Commitment>(initial);
   const [events, setEvents] = useState<VerdictEvent[]>(initialEvents);
+  const [passedVerdict, setPassedVerdict] = useState<PassedOracleVerdict | null>(
+    initialPassedVerdict,
+  );
+  const [settling, setSettling] = useState<'withdraw' | 'degen' | null>(null);
+  const [settleMessage, setSettleMessage] = useState<string | null>(null);
+  const [settleError, setSettleError] = useState<string | null>(null);
 
   useEffect(() => {
     const sb = supabaseBrowser();
@@ -111,12 +120,85 @@ export function LiveCommitment({
   const now = Math.floor(Date.now() / 1000);
   const deadlinePassed = now >= deadlineSec;
   const isActive = commitment.status === 'active';
+  const hasPassedOracleVerdict = Boolean(passedVerdict);
   const canSubmit =
-    isCreator && isActive && !deadlinePassed && commitment.attempts_used < ATTEMPT_CAP;
-  const canForfeit = isCreator && isActive && deadlinePassed;
-  const canClaim = isEnemy && isActive && deadlinePassed;
+    isCreator &&
+    isActive &&
+    !deadlinePassed &&
+    !hasPassedOracleVerdict &&
+    commitment.attempts_used < ATTEMPT_CAP;
+  const canSettle = isCreator && isActive && hasPassedOracleVerdict;
+  const canForfeit = isCreator && isActive && deadlinePassed && !hasPassedOracleVerdict;
+  const canClaim = isEnemy && isActive && deadlinePassed && !hasPassedOracleVerdict;
 
   const idBig = BigInt(commitment.id);
+
+  useEffect(() => {
+    if (!isCreator || !isActive || passedVerdict) return;
+
+    let cancelled = false;
+    async function checkVerdict() {
+      try {
+        const res = await fetch(`/api/commitments/${commitment.id}/oracle-verdict`, {
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          passed?: boolean;
+          verdict?: PassedOracleVerdict | null;
+        };
+        if (!cancelled && data.passed && data.verdict) {
+          setPassedVerdict(data.verdict);
+          router.refresh();
+        }
+      } catch {
+        // Keep polling; transient network errors should not strand the page.
+      }
+    }
+
+    void checkVerdict();
+    const interval = window.setInterval(checkVerdict, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [commitment.id, isActive, isCreator, passedVerdict, router]);
+
+  async function settle(mode: 'withdraw' | 'degen') {
+    setSettling(mode);
+    setSettleError(null);
+    setSettleMessage(null);
+
+    try {
+      const res = await fetch(mode === 'degen' ? '/api/degen' : '/api/withdraw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commitmentId: String(commitment.id) }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        txHash?: string;
+      };
+
+      if (!res.ok) {
+        throw new Error(data.error ?? 'Settlement failed');
+      }
+
+      if (mode === 'degen') {
+        router.push('/degen');
+        return;
+      }
+
+      setSettleMessage(
+        data.txHash ? `Withdraw submitted. Tx ${shortAddr(data.txHash)}` : 'Withdraw submitted.',
+      );
+      router.refresh();
+    } catch (error) {
+      setSettleError(error instanceof Error ? error.message : 'Settlement failed');
+    } finally {
+      setSettling(null);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -169,6 +251,37 @@ export function LiveCommitment({
         </h2>
         <p className="whitespace-pre-wrap text-lg leading-relaxed text-[var(--ink-1)]">{commitment.rubric}</p>
       </section>
+
+      {canSettle && (
+        <section className="pn-panel flex flex-col gap-4 rounded-2xl p-5">
+          <div>
+            <h2 className="text-xl font-bold text-[var(--success)]">Oracle passed this attempt</h2>
+            <p className="mt-1 text-sm text-[var(--ink-1)]">
+              Choose where the stake should settle.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void settle('withdraw')}
+              disabled={settling !== null}
+              className="pn-btn pn-btn-primary text-sm disabled:opacity-60"
+            >
+              {settling === 'withdraw' ? 'Withdrawing…' : 'Withdraw'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void settle('degen')}
+              disabled={settling !== null}
+              className="pn-btn pn-btn-secondary text-sm disabled:opacity-60"
+            >
+              {settling === 'degen' ? 'Entering…' : 'Enter Degen Mode'}
+            </button>
+          </div>
+          {settleMessage && <p className="text-sm text-[var(--success)]">{settleMessage}</p>}
+          {settleError && <p className="text-sm text-[var(--danger)]">{settleError}</p>}
+        </section>
+      )}
 
       {canSubmit && (
         <SubmitEvidenceForm
