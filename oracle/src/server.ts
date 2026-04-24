@@ -16,6 +16,8 @@ const USDC_DECIMALS = 6;
 
 type JsonBody = Record<string, unknown>;
 
+class OracleVerdictPendingError extends Error {}
+
 function writeJson(
   res: ServerResponse,
   status: number,
@@ -76,6 +78,7 @@ function parseUsdcAmount(json: JsonBody): bigint | null {
 async function markApiVerdictSubmitted(
   supabase: SupabaseAdminClient,
   args: {
+    contractAddress: `0x${string}`;
     commitmentId: bigint;
     attemptNumber: number;
     passed: boolean;
@@ -85,6 +88,7 @@ async function markApiVerdictSubmitted(
 ): Promise<void> {
   const { error } = await supabase.from('oracle_verdicts').upsert(
     {
+      contract_address: args.contractAddress.toLowerCase(),
       commitment_id: args.commitmentId.toString(),
       attempt_number: args.attemptNumber,
       status: 'submitted',
@@ -93,18 +97,39 @@ async function markApiVerdictSubmitted(
       tx_hash: args.txHash,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: 'commitment_id,attempt_number' },
+    { onConflict: 'contract_address,commitment_id,attempt_number' },
   );
   if (error) throw new Error(`markApiVerdictSubmitted: ${error.message}`);
 }
 
+async function requirePassedOracleVerdict(
+  supabase: SupabaseAdminClient,
+  args: { contractAddress: `0x${string}`; commitmentId: bigint },
+): Promise<number> {
+  const { data, error } = await supabase
+    .from('oracle_verdicts')
+    .select('attempt_number, status, passed')
+    .eq('contract_address', args.contractAddress.toLowerCase())
+    .eq('commitment_id', args.commitmentId.toString())
+    .eq('status', 'submitted')
+    .eq('passed', true)
+    .order('attempt_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`requirePassedOracleVerdict: ${error.message}`);
+  if (!data) throw new OracleVerdictPendingError('No passing oracle verdict recorded yet');
+  return (data as { attempt_number: number }).attempt_number;
+}
+
 async function loadReleaseFromCommitment(
   supabase: SupabaseAdminClient,
+  contractAddress: `0x${string}`,
   commitmentId: bigint,
 ): Promise<{ to: `0x${string}`; amount: bigint }> {
   const { data, error } = await supabase
     .from('commitments')
     .select('creator_address, stake')
+    .eq('contract_address', contractAddress.toLowerCase())
     .eq('id', commitmentId.toString())
     .maybeSingle();
   if (error) throw new Error(`loadReleaseFromCommitment: ${error.message}`);
@@ -145,6 +170,10 @@ export function createApiServer(
 
       try {
         const commitment = await getCommitment(clients, commitmentId);
+        await requirePassedOracleVerdict(supabase, {
+          contractAddress: clients.contractAddress,
+          commitmentId,
+        });
 
         if (commitment.status !== Status.Active) {
           writeJson(res, 400, { error: 'Commitment is not active' });
@@ -166,6 +195,10 @@ export function createApiServer(
         logger.info({ commitmentId: commitmentId.toString(), txHash }, 'oracle.withdraw.success');
         writeJson(res, 200, { success: true, txHash });
       } catch (err) {
+        if (err instanceof OracleVerdictPendingError) {
+          writeJson(res, 409, { error: 'Oracle verdict is not ready yet' });
+          return;
+        }
         logger.error({ err }, 'oracle.withdraw.error');
         writeJson(res, 500, { error: 'Withdraw failed' });
       }
@@ -195,6 +228,10 @@ export function createApiServer(
 
       try {
         const commitment = await getCommitment(clients, commitmentId);
+        const passedAttempt = await requirePassedOracleVerdict(supabase, {
+          contractAddress: clients.contractAddress,
+          commitmentId,
+        });
 
         if (commitment.status !== Status.Active) {
           writeJson(res, 400, { error: 'Commitment is not active' });
@@ -223,8 +260,9 @@ export function createApiServer(
 
         try {
           await markApiVerdictSubmitted(supabase, {
+            contractAddress: clients.contractAddress,
             commitmentId,
-            attemptNumber: commitment.attemptsUsed,
+            attemptNumber: passedAttempt,
             passed: true,
             reason,
             txHash: verdictTxHash,
@@ -247,6 +285,10 @@ export function createApiServer(
         );
         writeJson(res, 200, { success: true, txHash: verdictTxHash, vaultTopUpTxHash: topUpTxHash });
       } catch (err) {
+        if (err instanceof OracleVerdictPendingError) {
+          writeJson(res, 409, { error: 'Oracle verdict is not ready yet' });
+          return;
+        }
         logger.error({ err }, 'oracle.degen.error');
         writeJson(res, 500, { error: 'Degen submission failed' });
       }
@@ -262,7 +304,11 @@ export function createApiServer(
         const json = await readJsonBody(req);
         if (json.commitmentId !== undefined) {
           commitmentId = parseCommitmentId(json.commitmentId);
-          const loaded = await loadReleaseFromCommitment(supabase, commitmentId);
+          const loaded = await loadReleaseFromCommitment(
+            supabase,
+            clients.contractAddress,
+            commitmentId,
+          );
           const recipient = json.to ?? json.walletAddress ?? json.recipient;
           to = recipient === undefined ? loaded.to : parseApiAddress(recipient, 'to');
           amount = parseUsdcAmount(json) ?? loaded.amount;

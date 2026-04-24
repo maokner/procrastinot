@@ -26,6 +26,31 @@ import type { OracleDb } from './db.js';
 // working until Phase B replaces the stub with the real ABI JSON.
 const abi = procrastinotAbi as unknown as Abi;
 const vaultAbi = degenVaultContractAbi as unknown as Abi;
+const legacyGetCommitmentAbi = [
+  {
+    type: 'function',
+    name: 'getCommitment',
+    inputs: [{ name: 'id', type: 'uint256' }],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple',
+        components: [
+          { name: 'user', type: 'address' },
+          { name: 'enemy', type: 'address' },
+          { name: 'stake', type: 'uint128' },
+          { name: 'oracleFee', type: 'uint128' },
+          { name: 'initialOracleFee', type: 'uint128' },
+          { name: 'deadline', type: 'uint64' },
+          { name: 'attemptsUsed', type: 'uint8' },
+          { name: 'status', type: 'uint8' },
+          { name: 'taskHash', type: 'bytes32' },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+] as const satisfies Abi;
 
 export type ChainClients = {
   publicClient: PublicClient;
@@ -76,7 +101,8 @@ type OnChainCommitmentTuple = readonly [
   bigint, // deadline
   number, // attemptsUsed
   number, // status
-  `0x${string}`, // taskHash
+  boolean | `0x${string}`, // verdictPending on new contracts, taskHash on legacy contracts
+  `0x${string}`?, // taskHash
 ];
 
 function normalizeCommitment(raw: unknown): Commitment {
@@ -93,7 +119,8 @@ function normalizeCommitment(raw: unknown): Commitment {
       deadline: t[5],
       attemptsUsed: Number(t[6]),
       status: t[7] as StatusT,
-      taskHash: t[8],
+      verdictPending: typeof t[8] === 'boolean' ? t[8] : false,
+      taskHash: (typeof t[8] === 'boolean' ? t[9] : t[8]) as `0x${string}`,
     };
   }
   const o = raw as {
@@ -105,6 +132,7 @@ function normalizeCommitment(raw: unknown): Commitment {
     deadline: bigint;
     attemptsUsed: number | bigint;
     status: number;
+    verdictPending?: boolean;
     taskHash: `0x${string}`;
   };
   return {
@@ -116,6 +144,7 @@ function normalizeCommitment(raw: unknown): Commitment {
     deadline: o.deadline,
     attemptsUsed: Number(o.attemptsUsed),
     status: o.status as StatusT,
+    verdictPending: o.verdictPending ?? false,
     taskHash: o.taskHash,
   };
 }
@@ -128,12 +157,22 @@ export async function getCommitment(
   clients: ChainClients,
   commitmentId: bigint,
 ): Promise<Commitment> {
-  const result = await clients.publicClient.readContract({
-    address: clients.contractAddress,
-    abi,
-    functionName: 'getCommitment',
-    args: [commitmentId],
-  });
+  let result: unknown;
+  try {
+    result = await clients.publicClient.readContract({
+      address: clients.contractAddress,
+      abi,
+      functionName: 'getCommitment',
+      args: [commitmentId],
+    });
+  } catch (err) {
+    result = await clients.publicClient.readContract({
+      address: clients.contractAddress,
+      abi: legacyGetCommitmentAbi,
+      functionName: 'getCommitment',
+      args: [commitmentId],
+    });
+  }
   return normalizeCommitment(result);
 }
 

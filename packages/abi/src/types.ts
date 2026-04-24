@@ -13,6 +13,7 @@ export type Commitment = {
   deadline: bigint;           // unix seconds
   attemptsUsed: number;
   status: Status;
+  verdictPending: boolean;
   taskHash: `0x${string}`;
 };
 

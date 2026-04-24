@@ -20,6 +20,7 @@ async function main(): Promise<void> {
   const db = openDb({
     supabaseUrl: config.supabaseUrl,
     supabaseServiceRoleKey: config.supabaseServiceRoleKey,
+    contractAddress: config.contractAddress,
   });
   const supabase = createSupabaseAdminClient({
     supabaseUrl: config.supabaseUrl,

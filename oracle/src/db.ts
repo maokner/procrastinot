@@ -3,12 +3,14 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 export type VerdictStatus = 'pending' | 'submitted' | 'failed';
 
 export type TaskRow = {
+  contract_address?: string;
   commitment_id: string;
   task: string;
   rubric: string;
 };
 
 export type VerdictRow = {
+  contract_address: string;
   commitment_id: string;
   attempt_number: number;
   status: VerdictStatus;
@@ -45,12 +47,13 @@ export type OracleDb = {
   close: () => void;
 };
 
-const CURSOR_KEY = 'last_block';
-
 export function openDb(args: {
   supabaseUrl: string;
   supabaseServiceRoleKey: string;
+  contractAddress: `0x${string}`;
 }): OracleDb {
+  const contractAddress = args.contractAddress.toLowerCase();
+  const cursorKey = `last_block:${contractAddress}`;
   const client = createClient(args.supabaseUrl, args.supabaseServiceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: { headers: { 'X-Client-Info': 'procrastinot-oracle' } },
@@ -63,7 +66,7 @@ export function openDb(args: {
       const { data, error } = await client
         .from('oracle_cursor')
         .select('value')
-        .eq('key', CURSOR_KEY)
+        .eq('key', cursorKey)
         .maybeSingle();
       if (error) throw new Error(`getCursor: ${error.message}`);
       if (!data) return null;
@@ -74,7 +77,7 @@ export function openDb(args: {
       const { error } = await client
         .from('oracle_cursor')
         .upsert(
-          { key: CURSOR_KEY, value: Number(block), updated_at: new Date().toISOString() },
+          { key: cursorKey, value: Number(block), updated_at: new Date().toISOString() },
           { onConflict: 'key' },
         );
       if (error) throw new Error(`setCursor: ${error.message}`);
@@ -84,8 +87,13 @@ export function openDb(args: {
       const { error } = await client
         .from('oracle_tasks')
         .upsert(
-          { commitment_id: row.commitment_id, task: row.task, rubric: row.rubric },
-          { onConflict: 'commitment_id' },
+          {
+            contract_address: contractAddress,
+            commitment_id: row.commitment_id,
+            task: row.task,
+            rubric: row.rubric,
+          },
+          { onConflict: 'contract_address,commitment_id' },
         );
       if (error) throw new Error(`upsertTask: ${error.message}`);
     },
@@ -93,7 +101,8 @@ export function openDb(args: {
     async getTask(commitmentId: string): Promise<TaskRow | undefined> {
       const { data, error } = await client
         .from('oracle_tasks')
-        .select('commitment_id, task, rubric')
+        .select('contract_address, commitment_id, task, rubric')
+        .eq('contract_address', contractAddress)
         .eq('commitment_id', commitmentId)
         .maybeSingle();
       if (error) throw new Error(`getTask: ${error.message}`);
@@ -108,13 +117,17 @@ export function openDb(args: {
         .from('oracle_verdicts')
         .upsert(
           {
+            contract_address: contractAddress,
             commitment_id,
             attempt_number,
             status: 'pending',
             evidence_uri,
             updated_at: new Date().toISOString(),
           },
-          { onConflict: 'commitment_id,attempt_number', ignoreDuplicates: true },
+          {
+            onConflict: 'contract_address,commitment_id,attempt_number',
+            ignoreDuplicates: true,
+          },
         )
         .select('commitment_id');
       if (error) throw new Error(`insertVerdict: ${error.message}`);
@@ -131,6 +144,7 @@ export function openDb(args: {
           tx_hash,
           updated_at: new Date().toISOString(),
         })
+        .eq('contract_address', contractAddress)
         .eq('commitment_id', commitment_id)
         .eq('attempt_number', attempt_number);
       if (error) throw new Error(`markVerdictSubmitted: ${error.message}`);
@@ -144,6 +158,7 @@ export function openDb(args: {
           reason,
           updated_at: new Date().toISOString(),
         })
+        .eq('contract_address', contractAddress)
         .eq('commitment_id', commitment_id)
         .eq('attempt_number', attempt_number);
       if (error) throw new Error(`markVerdictFailed: ${error.message}`);
@@ -152,7 +167,8 @@ export function openDb(args: {
     async getPendingVerdicts(): Promise<VerdictRow[]> {
       const { data, error } = await client
         .from('oracle_verdicts')
-        .select('commitment_id, attempt_number, status, passed, reason, tx_hash, evidence_uri')
+        .select('contract_address, commitment_id, attempt_number, status, passed, reason, tx_hash, evidence_uri')
+        .eq('contract_address', contractAddress)
         .eq('status', 'pending')
         .order('updated_at', { ascending: true });
       if (error) throw new Error(`getPendingVerdicts: ${error.message}`);

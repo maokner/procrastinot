@@ -40,6 +40,7 @@ contract Procrastinot is ReentrancyGuard, Ownable2Step {
         uint64 deadline; // unix seconds
         uint8 attemptsUsed; // 0..ATTEMPT_CAP
         Status status;
+        bool verdictPending; // true after a valid pre-deadline submission until oracle answers
         bytes32 taskHash; // keccak256(abi.encode(task, rubric))
     }
 
@@ -78,6 +79,7 @@ contract Procrastinot is ReentrancyGuard, Ownable2Step {
     error InvalidOperator();
     error InvalidDegenVault();
     error DegenVaultNotSet();
+    error VerdictPending();
 
     // ---------------------------------------------------------------------
     // Events
@@ -140,6 +142,7 @@ contract Procrastinot is ReentrancyGuard, Ownable2Step {
             deadline: deadline,
             attemptsUsed: 0,
             status: Status.Active,
+            verdictPending: false,
             taskHash: keccak256(abi.encode(task, rubric))
         });
 
@@ -155,6 +158,7 @@ contract Procrastinot is ReentrancyGuard, Ownable2Step {
         if (c.user != msg.sender) revert NotUser();
         if (c.status != Status.Active) revert NotActive();
         if (block.timestamp >= c.deadline) revert DeadlinePassed();
+        if (c.verdictPending) revert VerdictPending();
         if (c.attemptsUsed >= ATTEMPT_CAP) revert AttemptsExhausted();
 
         uint128 feePerAttempt = c.initialOracleFee / ATTEMPT_CAP;
@@ -164,6 +168,7 @@ contract Procrastinot is ReentrancyGuard, Ownable2Step {
         uint128 pay = feePerAttempt <= c.oracleFee ? feePerAttempt : c.oracleFee;
         c.oracleFee -= pay;
         c.attemptsUsed += 1;
+        c.verdictPending = true;
 
         if (pay > 0) {
             usdc.safeTransfer(operatorWallet, pay);
@@ -180,6 +185,7 @@ contract Procrastinot is ReentrancyGuard, Ownable2Step {
         if (c.status != Status.Active) revert NotActive();
 
         emit VerdictSubmitted(id, passed, reasonHash);
+        c.verdictPending = false;
 
         if (passed) {
             uint128 refund = c.stake;
@@ -220,6 +226,7 @@ contract Procrastinot is ReentrancyGuard, Ownable2Step {
         c.stake = 0;
         c.oracleFee = 0;
         c.status = Status.Completed;
+        c.verdictPending = false;
 
         emit VerdictSubmitted(id, true, reasonHash);
 
@@ -243,6 +250,7 @@ contract Procrastinot is ReentrancyGuard, Ownable2Step {
         Commitment storage c = _commitments[id];
         if (c.status != Status.Active) revert NotActive();
         if (block.timestamp < c.deadline) revert DeadlineNotReached();
+        if (c.verdictPending) revert VerdictPending();
 
         uint128 stakeAmount = c.stake;
         uint128 remainingFee = c.oracleFee;

@@ -90,6 +90,7 @@ contract ProcrastinotTest is Test {
         assertEq(c.deadline, deadline);
         assertEq(c.attemptsUsed, 0);
         assertEq(uint8(c.status), uint8(Procrastinot.Status.Active));
+        assertFalse(c.verdictPending);
         assertEq(c.taskHash, keccak256(abi.encode("write essay", "must be 500 words")));
 
         assertEq(usdc.balanceOf(user), userBalBefore - STAKE - FEE);
@@ -151,6 +152,18 @@ contract ProcrastinotTest is Test {
         Procrastinot.Commitment memory c = p.getCommitment(id);
         assertEq(c.oracleFee, FEE - perAttempt);
         assertEq(c.attemptsUsed, 1);
+        assertTrue(c.verdictPending);
+    }
+
+    function testRequestVerdictRejectsWhilePreviousVerdictPending() public {
+        uint256 id = _createDefault();
+
+        vm.prank(user);
+        p.requestVerdict(id, "ipfs://evidence-1");
+
+        vm.prank(user);
+        vm.expectRevert(Procrastinot.VerdictPending.selector);
+        p.requestVerdict(id, "ipfs://evidence-2");
     }
 
     function testRequestVerdictRespectsAttemptCap() public {
@@ -158,6 +171,8 @@ contract ProcrastinotTest is Test {
         for (uint256 i = 0; i < 3; i++) {
             vm.prank(user);
             p.requestVerdict(id, "ipfs://evidence");
+            vm.prank(oracle);
+            p.submitVerdict(id, false, bytes32(uint256(i + 1)));
         }
         vm.prank(user);
         vm.expectRevert(Procrastinot.AttemptsExhausted.selector);
@@ -207,6 +222,7 @@ contract ProcrastinotTest is Test {
 
         Procrastinot.Commitment memory c = p.getCommitment(id);
         assertEq(uint8(c.status), uint8(Procrastinot.Status.Completed));
+        assertFalse(c.verdictPending);
         assertEq(c.stake, 0);
         assertEq(c.oracleFee, 0);
     }
@@ -222,6 +238,7 @@ contract ProcrastinotTest is Test {
 
         Procrastinot.Commitment memory c = p.getCommitment(id);
         assertEq(uint8(c.status), uint8(Procrastinot.Status.Active));
+        assertFalse(c.verdictPending);
         assertEq(c.stake, STAKE);
         assertEq(c.oracleFee, FEE);
         assertEq(usdc.balanceOf(user), userBefore);
@@ -331,6 +348,8 @@ contract ProcrastinotTest is Test {
         // burn one attempt first -> unspent oracleFee is FEE - perAttempt
         vm.prank(user);
         p.requestVerdict(id, "ipfs://e");
+        vm.prank(oracle);
+        p.submitVerdict(id, false, bytes32(uint256(0xBAD)));
 
         Procrastinot.Commitment memory cBefore = p.getCommitment(id);
         uint128 expectedStake = cBefore.stake;
@@ -355,7 +374,26 @@ contract ProcrastinotTest is Test {
         assertEq(c.oracleFee, 0);
     }
 
-    function testForfeitAfterRequestVerdictSplitsRemainderToOperator() public {
+    function testForfeitAfterPendingRequestRevertsUntilOracleAnswers() public {
+        uint256 id = _createDefault();
+
+        vm.prank(user);
+        p.requestVerdict(id, "ipfs://e");
+
+        vm.warp(deadline + 1);
+        vm.expectRevert(Procrastinot.VerdictPending.selector);
+        p.forfeit(id);
+
+        vm.prank(oracle);
+        p.submitVerdict(id, false, bytes32(uint256(0xBAD)));
+
+        p.forfeit(id);
+
+        Procrastinot.Commitment memory c = p.getCommitment(id);
+        assertEq(uint8(c.status), uint8(Procrastinot.Status.Forfeited));
+    }
+
+    function testForfeitAfterAnsweredRequestSplitsRemainderToOperator() public {
         uint256 id = _createDefault();
 
         uint256 enemyBefore = usdc.balanceOf(enemy);
@@ -364,6 +402,8 @@ contract ProcrastinotTest is Test {
         // One requestVerdict burns exactly 1/3 of the initial oracle fee to operator.
         vm.prank(user);
         p.requestVerdict(id, "ipfs://e");
+        vm.prank(oracle);
+        p.submitVerdict(id, false, bytes32(uint256(0xBAD)));
 
         uint128 perAttempt = FEE / 3;
 

@@ -171,6 +171,11 @@ export const procrastinotAbi = [
             "internalType": "enum Procrastinot.Status"
           },
           {
+            "name": "verdictPending",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
             "name": "taskHash",
             "type": "bytes32",
             "internalType": "bytes32"
@@ -754,6 +759,11 @@ export const procrastinotAbi = [
         "internalType": "address"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "VerdictPending",
+    "inputs": []
   },
   {
     "type": "error",
