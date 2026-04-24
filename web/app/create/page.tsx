@@ -56,7 +56,7 @@ function CreateForm() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showSug, setShowSug] = useState(false);
   const [stake, setStake] = useState('');
-  const [oracleFee, setOracleFee] = useState('0.25');
+  const oracleFee = '0.1';
   const [deadlineLocal, setDeadlineLocal] = useState('');
   const [step, setStep] = useState<Step>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -143,7 +143,8 @@ function CreateForm() {
   }, [stake]);
   const feeWei = useMemo(() => {
     try { return parseUsdc(oracleFee); } catch { return 0n; }
-  }, [oracleFee]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const totalWei = stakeWei + feeWei;
 
   const allowanceQuery = useReadContract({
@@ -373,17 +374,6 @@ function CreateForm() {
             onChange={(e) => setStake(e.target.value)}
             className="pn-input"
             placeholder="10"
-          />
-        </label>
-        <label className="flex flex-col gap-1.5">
-          <span className="text-sm text-[var(--ink-1)]">Oracle fee (USDC)</span>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            value={oracleFee}
-            onChange={(e) => setOracleFee(e.target.value)}
-            className="pn-input"
           />
         </label>
       </div>

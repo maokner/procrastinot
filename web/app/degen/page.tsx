@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabaseBrowser } from '@/lib/supabase';
 import type { DegenBalance, PlinkoDrop } from '@/lib/db-types';
@@ -56,6 +56,10 @@ export default function DegenPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<DropResult | null>(null);
 
+  // Guards to suppress realtime updates during animation
+  const droppingRef = useRef(false);
+  const pendingDropsRef = useRef<PlinkoDrop[]>([]);
+
   useEffect(() => {
     const sb = supabaseBrowser();
     let active = true;
@@ -100,7 +104,12 @@ export default function DegenPage() {
           table: 'degen_balances',
           filter: `user_id=eq.${userId}`,
         },
-        (payload) => setBalance(payload.new as DegenBalance),
+        (payload) => {
+          // Suppress during drop — balance is set from API response after animation
+          if (!droppingRef.current) {
+            setBalance(payload.new as DegenBalance);
+          }
+        },
       )
       .on(
         'postgres_changes',
@@ -112,7 +121,12 @@ export default function DegenPage() {
         },
         (payload) => {
           const next = payload.new as PlinkoDrop;
-          setDrops((prev) => [next, ...prev.filter((drop) => drop.id !== next.id)].slice(0, 20));
+          if (droppingRef.current) {
+            // Queue until animation completes
+            pendingDropsRef.current = [next, ...pendingDropsRef.current];
+          } else {
+            setDrops((prev) => [next, ...prev.filter((d) => d.id !== next.id)].slice(0, 20));
+          }
         },
       )
       .subscribe();
@@ -150,27 +164,38 @@ export default function DegenPage() {
 
   async function animatePath(path: boolean[]) {
     setBall({ x: CENTER_X, y: TOP_Y, visible: true });
+    await delay(180);
+
     let rights = 0;
     for (let i = 0; i < path.length; i += 1) {
-      await delay(78);
-      if (path[i]) rights += 1;
-      setBall({
-        x: CENTER_X + (2 * rights - (i + 1)) * (boardGeometry.gap / 2),
-        y: TOP_Y + (i + 1) * boardGeometry.rowGap,
-        visible: true,
-      });
+      const goRight = path[i];
+      if (goRight) rights += 1;
+
+      const destX = CENTER_X + (2 * rights - (i + 1)) * (boardGeometry.gap / 2);
+      const destY = TOP_Y + (i + 1) * boardGeometry.rowGap;
+      // Gravity: starts ~95ms per row, accelerates to ~45ms at bottom
+      const stepMs = Math.max(45, 95 - i * 3);
+
+      // Phase 1: ball approaches peg (slightly above)
+      setBall({ x: destX, y: destY - 4, visible: true });
+      await delay(Math.round(stepMs * 0.55));
+      // Phase 2: settle with slight downward overshoot (peg bounce feel)
+      setBall({ x: destX, y: destY + 3, visible: true });
+      await delay(Math.round(stepMs * 0.45));
     }
-    await delay(140);
+
+    await delay(60);
     setBall({
-      x: CENTER_X + (2 * rights - rows) * (boardGeometry.gap / 2),
+      x: CENTER_X + (2 * rights - path.length) * (boardGeometry.gap / 2),
       y: BOTTOM_Y,
       visible: true,
     });
-    await delay(220);
+    await delay(280);
     setBall((current) => ({ ...current, visible: false }));
   }
 
   async function handleDrop() {
+    droppingRef.current = true;
     setDropping(true);
     setError(null);
     setMessage(null);
@@ -182,12 +207,28 @@ export default function DegenPage() {
       });
       const data = (await res.json()) as DropResult & { error?: string };
       if (!res.ok) throw new Error(data.error ?? 'Drop failed');
-      setLastResult(data);
-      setBalance((prev) => prev ? { ...prev, balance_usdc: Math.round(Number(data.balanceAfter) * 1_000_000) } : prev);
+
+      // Animate FIRST — balance and drops update only after ball lands
       await animatePath(data.path);
+
+      setLastResult(data);
+      setBalance((prev) =>
+        prev ? { ...prev, balance_usdc: Math.round(Number(data.balanceAfter) * 1_000_000) } : prev,
+      );
+
+      // Flush drops that arrived during animation
+      const queued = pendingDropsRef.current;
+      if (queued.length > 0) {
+        pendingDropsRef.current = [];
+        setDrops((prev) => {
+          const merged = [...queued, ...prev];
+          return merged.filter((d, i, a) => a.findIndex((x) => x.id === d.id) === i).slice(0, 20);
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Drop failed');
     } finally {
+      droppingRef.current = false;
       setDropping(false);
     }
   }
@@ -205,6 +246,8 @@ export default function DegenPage() {
       const data = (await res.json()) as { error?: string; txHash?: string };
       if (!res.ok) throw new Error(data.error ?? 'Cashout failed');
       setMessage(data.txHash ? `Withdrawn. Tx ${data.txHash}` : 'Withdrawn. Check your wallet.');
+      // Immediately reflect zero balance — don't wait for realtime
+      setBalance((prev) => (prev ? { ...prev, balance_usdc: 0 } : null));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Cashout failed');
     } finally {
@@ -417,7 +460,7 @@ function PlinkoBoard({
           fill="var(--accent)"
           stroke="black"
           strokeWidth="3"
-          style={{ transition: 'cx 70ms linear, cy 70ms linear' }}
+          style={{ transition: 'cx 40ms ease-out, cy 40ms ease-out' }}
         />
       )}
     </svg>
