@@ -22,7 +22,7 @@ CREATE TABLE plinko_drops (
   server_seed      TEXT    NOT NULL,
   server_seed_hash TEXT    NOT NULL,
   client_seed      TEXT    NOT NULL,
-  nonce            INTEGER NOT NULL,
+  nonce            BIGINT NOT NULL,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -124,7 +124,7 @@ CREATE OR REPLACE FUNCTION process_plinko_drop(
   p_server_seed TEXT,
   p_server_seed_hash TEXT,
   p_client_seed TEXT,
-  p_nonce INTEGER
+  p_nonce BIGINT
 ) RETURNS TABLE(
   drop_id UUID,
   balance_before BIGINT,
@@ -197,11 +197,11 @@ $$;
 
 REVOKE ALL ON FUNCTION credit_degen_balance(UUID, BIGINT) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION record_degen_deposit(UUID, TEXT, BIGINT, BIGINT, TEXT) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION process_plinko_drop(UUID, BIGINT, INTEGER, INTEGER, TEXT, NUMERIC, BIGINT, TEXT, TEXT, TEXT, INTEGER) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION process_plinko_drop(UUID, BIGINT, INTEGER, INTEGER, TEXT, NUMERIC, BIGINT, TEXT, TEXT, TEXT, BIGINT) FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION credit_degen_balance(UUID, BIGINT) TO service_role;
 GRANT EXECUTE ON FUNCTION record_degen_deposit(UUID, TEXT, BIGINT, BIGINT, TEXT) TO service_role;
-GRANT EXECUTE ON FUNCTION process_plinko_drop(UUID, BIGINT, INTEGER, INTEGER, TEXT, NUMERIC, BIGINT, TEXT, TEXT, TEXT, INTEGER) TO service_role;
+GRANT EXECUTE ON FUNCTION process_plinko_drop(UUID, BIGINT, INTEGER, INTEGER, TEXT, NUMERIC, BIGINT, TEXT, TEXT, TEXT, BIGINT) TO service_role;
 
 DO $$
 BEGIN
