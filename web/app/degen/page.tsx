@@ -26,7 +26,6 @@ const SPAWN_DELAY_MS = 700;
 type DropResult = {
   dropId: string;
   risk: RiskLevel;
-  path: boolean[];
   slot: number;
   multiplier: number;
   multipliers: number[];
@@ -36,6 +35,8 @@ type DropResult = {
   serverSeed: string;
   serverSeedHash: string;
   clientSeed: string;
+  trajectory: number[][];
+  pegHits: { frame: number; x: number; y: number }[];
 };
 
 type Flash = { key: number; result: 'win' | 'miss'; multiplier: number };
@@ -247,7 +248,12 @@ export default function DegenPage() {
         }
       };
 
-      const added = boardRef.current?.addBall(data.path, creditPayout);
+      const added = boardRef.current?.addPlaybackBall(
+        data.trajectory,
+        data.pegHits,
+        data.slot,
+        creditPayout,
+      );
 
       if (!added) {
         // Board was at capacity — credit payout immediately since no ball

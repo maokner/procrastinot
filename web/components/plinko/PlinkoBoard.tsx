@@ -19,19 +19,6 @@ import {
   type RiskLevel,
 } from '@/lib/plinko';
 import {
-  BALL_DENSITY,
-  BALL_FRICTION_AIR,
-  BALL_RESTITUTION,
-  CAT_BALL,
-  CAT_PEG,
-  CAT_WALL,
-  GRAVITY_Y,
-  GUIDE_MIN_SPEED,
-  MAX_BALL_LIFETIME_MS,
-  PEG_RESTITUTION,
-  STUCK_MIN_SPEED_SQ,
-  STUCK_TIMEOUT_MS,
-  TARGET_ATTRACTION,
   bucketCenterX,
   getBoardGeometry,
   pegLayout,
@@ -45,23 +32,23 @@ import {
 
 export const MAX_PLINKO_BALLS = 24;
 const MAX_PAYOUT_CARDS = 5;
+const FRAME_DT_MS = 1000 / 60;
 
 const RING_DURATION_MS = 250;
 const BUCKET_BOUNCE_MS = 280;
 const BUCKET_BOUNCE_PX = 4;
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-// Path-driven ball: the math engine has already chosen the bucket. `path` is
-// the bit array from the server; `targetSlot = path.filter(Boolean).length`.
-// The renderer animates a guided ball that lands in this exact bucket.
-type BallRecord = {
-  body: Matter.Body;
-  path: boolean[];
+// Trajectory replay: server runs the physics, returns the ball's position
+// per fixed step plus peg-hit timestamps. We animate by interpolating along
+// the recorded trajectory and firing peg-hit effects on the matching frame.
+type PlaybackBall = {
+  id: number;
+  trajectory: number[][]; // [[x, y], ...] one entry per FRAME_DT_MS
+  pegHits: { frame: number; x: number; y: number }[];
+  nextPegHitIdx: number;
+  startTs: number;
   targetSlot: number;
-  lastGuidedRow: number;
   landed: boolean;
-  spawnTs: number;
-  lastMotionTs: number;
   onLand: (slot: number) => void;
 };
 
@@ -69,7 +56,12 @@ type Ring = { x: number; y: number; t0: number };
 type BucketAnim = { slot: number; t0: number };
 
 export type PlinkoBoardHandle = {
-  addBall: (path: boolean[], onLand: (slot: number) => void) => boolean;
+  addPlaybackBall: (
+    trajectory: number[][],
+    pegHits: { frame: number; x: number; y: number }[],
+    targetSlot: number,
+    onLand: (slot: number) => void,
+  ) => boolean;
 };
 
 type PayoutCard = {
@@ -78,7 +70,6 @@ type PayoutCard = {
   multiplier: number;
 };
 
-// ─── Component ──────────────────────────────────────────────────────────────
 const PlinkoBoard = forwardRef<
   PlinkoBoardHandle,
   {
@@ -92,21 +83,21 @@ const PlinkoBoard = forwardRef<
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const engineRef = useRef<Matter.Engine | null>(null);
-  const pegBodiesRef = useRef<Matter.Body[]>([]);
-  const ballsRef = useRef<BallRecord[]>([]);
+  const playbackBallsRef = useRef<PlaybackBall[]>([]);
   const ringsRef = useRef<Ring[]>([]);
   const bucketAnimsRef = useRef<BucketAnim[]>([]);
   const rafRef = useRef<number>(0);
   const activeSlotRef = useRef(activeSlot);
   const hoveredSlotRef = useRef<number | null>(null);
   const cardSeqRef = useRef(0);
+  const ballSeqRef = useRef(0);
 
   const [hoveredSlot, setHoveredSlot] = useState<number | null>(null);
   const [payoutCards, setPayoutCards] = useState<PayoutCard[]>([]);
   const [muted, setMutedState] = useState(false);
 
   const geo = useMemo(() => getBoardGeometry(rows), [rows]);
+  const pegs = useMemo(() => pegLayout(rows, geo), [rows, geo]);
   const multipliers = useMemo(
     () => getMultipliers(rows, riskLevel),
     [rows, riskLevel],
@@ -127,187 +118,17 @@ const PlinkoBoard = forwardRef<
     hoveredSlotRef.current = hoveredSlot;
   }, [hoveredSlot]);
 
-  // ─── Engine lifecycle (recreated when rows change) ────────────────────────
+  // Render loop — pure canvas, no physics engine on the client. The server's
+  // recorded trajectories drive every ball.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    if (engineRef.current) {
-      Matter.Events.off(engineRef.current, 'beforeUpdate');
-      Matter.Events.off(engineRef.current, 'collisionStart');
-      Matter.Engine.clear(engineRef.current);
-      engineRef.current = null;
-    }
-    ballsRef.current = [];
+    playbackBallsRef.current = [];
     ringsRef.current = [];
     bucketAnimsRef.current = [];
-
-    const engine = Matter.Engine.create({ gravity: { x: 0, y: GRAVITY_Y } });
-    engineRef.current = engine;
-
-    const pegs = pegLayout(rows, geo);
-    const pegBodies = pegs.map(({ x, y }) =>
-      Matter.Bodies.circle(x, y, geo.pegR, {
-        isStatic: true,
-        restitution: PEG_RESTITUTION,
-        friction: 0.05,
-        label: 'peg',
-        collisionFilter: { category: CAT_PEG, mask: CAT_BALL },
-      }),
-    );
-    pegBodiesRef.current = pegBodies;
-
-    const wallOpts = {
-      isStatic: true,
-      restitution: 0.2,
-      friction: 0.1,
-      label: 'wall',
-      collisionFilter: { category: CAT_WALL, mask: CAT_BALL },
-    };
-    const wallInset = 18;
-    const walls: Matter.Body[] = [
-      Matter.Bodies.rectangle(
-        wallInset,
-        geo.boardH / 2,
-        36,
-        geo.boardH * 2,
-        wallOpts,
-      ),
-      Matter.Bodies.rectangle(
-        geo.boardW - wallInset,
-        geo.boardH / 2,
-        36,
-        geo.boardH * 2,
-        wallOpts,
-      ),
-      // Floor sits below the bucket so balls visibly settle in their slot.
-      Matter.Bodies.rectangle(
-        geo.boardW / 2,
-        geo.slotY + geo.slotH + 22,
-        geo.boardW,
-        44,
-        wallOpts,
-      ),
-    ];
-
-    // Bucket dividers — one between every adjacent pair of buckets, plus the
-    // outer two edges. These confine the ball to the predetermined slot once
-    // it has dropped past the last peg row.
-    const dividerTop = geo.slotY - 4;
-    const dividerBottom = geo.slotY + geo.slotH;
-    for (let k = 0; k <= rows + 1; k++) {
-      const xDiv =
-        geo.centerX - (rows * geo.gap) / 2 + (k - 0.5) * geo.gap;
-      walls.push(
-        Matter.Bodies.rectangle(
-          xDiv,
-          (dividerTop + dividerBottom) / 2,
-          3,
-          dividerBottom - dividerTop,
-          wallOpts,
-        ),
-      );
-    }
-
-    Matter.World.add(engine.world, [...pegBodies, ...walls]);
-
-    // Peg-hit ring + click sound.
-    Matter.Events.on(engine, 'collisionStart', (event) => {
-      const now = performance.now();
-      for (const pair of event.pairs) {
-        const { bodyA, bodyB } = pair;
-        const peg =
-          bodyA.label === 'peg' ? bodyA : bodyB.label === 'peg' ? bodyB : null;
-        const ball =
-          bodyA.label === 'ball' ? bodyA : bodyB.label === 'ball' ? bodyB : null;
-        if (peg && ball) {
-          ringsRef.current.push({ x: peg.position.x, y: peg.position.y, t0: now });
-          if (ringsRef.current.length > 32) {
-            ringsRef.current.splice(0, ringsRef.current.length - 32);
-          }
-          playPegHit();
-        }
-      }
-    });
-
-    // Per-ball guidance: nudge velocity by row, attract toward target near
-    // the bottom, then land when the ball reaches bucket bottom.
-    Matter.Events.on(engine, 'beforeUpdate', () => {
-      const now = performance.now();
-
-      for (const ball of ballsRef.current) {
-        if (ball.landed) continue;
-        const { x, y } = ball.body.position;
-        const vx = ball.body.velocity.x;
-        const vy = ball.body.velocity.y;
-        const speedSq = vx * vx + vy * vy;
-        if (speedSq > STUCK_MIN_SPEED_SQ) ball.lastMotionTs = now;
-
-        // Land when ball is well inside the bucket — visually it falls all
-        // the way down rather than vanishing above the bucket lip.
-        if (y >= geo.slotY + geo.slotH - geo.ballR - 2) {
-          landBall(ball, ball.targetSlot, now);
-          continue;
-        }
-
-        // Stuck-ball cleanup. The attractor can occasionally pin a ball
-        // against a peg corner; this catches that case.
-        if (
-          now - ball.lastMotionTs > STUCK_TIMEOUT_MS ||
-          now - ball.spawnTs > MAX_BALL_LIFETIME_MS
-        ) {
-          landBall(ball, ball.targetSlot, now);
-          continue;
-        }
-
-        // Per-row velocity nudge — picks the side dictated by the bit array.
-        const gapIndex = Math.floor((y - geo.topY) / geo.rowGap);
-        if (
-          gapIndex >= 0 &&
-          gapIndex < ball.path.length &&
-          gapIndex !== ball.lastGuidedRow
-        ) {
-          ball.lastGuidedRow = gapIndex;
-          const dir = ball.path[gapIndex] ? 1 : -1;
-          const newVx = dir * Math.max(Math.abs(vx), GUIDE_MIN_SPEED);
-          Matter.Body.setVelocity(ball.body, { x: newVx, y: vy });
-        }
-
-        // Soft attractor so the visual landing aligns with the target slot.
-        if (y > geo.slotY - geo.rowGap * 3) {
-          const targetX = bucketCenterX(ball.targetSlot, rows, geo);
-          Matter.Body.applyForce(ball.body, ball.body.position, {
-            x: (targetX - x) * TARGET_ATTRACTION * ball.body.mass,
-            y: 0,
-          });
-        }
-      }
-
-      // Trim ring + bucket animations.
-      const ringCut = now - RING_DURATION_MS;
-      if (ringsRef.current.length && ringsRef.current[0].t0 < ringCut) {
-        ringsRef.current = ringsRef.current.filter((r) => r.t0 >= ringCut);
-      }
-      const bucketCut = now - BUCKET_BOUNCE_MS;
-      if (
-        bucketAnimsRef.current.length &&
-        bucketAnimsRef.current[0].t0 < bucketCut
-      ) {
-        bucketAnimsRef.current = bucketAnimsRef.current.filter(
-          (b) => b.t0 >= bucketCut,
-        );
-      }
-
-      ballsRef.current = ballsRef.current.filter((b) => {
-        if (b.body.position.y > geo.boardH + 80) {
-          Matter.World.remove(engine.world, b.body);
-          return false;
-        }
-        return true;
-      });
-    });
 
     function commitLanding(slot: number, now: number, onLand: (s: number) => void) {
       bucketAnimsRef.current.push({ slot, t0: now });
@@ -324,35 +145,80 @@ const PlinkoBoard = forwardRef<
       onLand(slot);
     }
 
-    function landBall(ball: BallRecord, slot: number, now: number) {
-      ball.landed = true;
-      Matter.World.remove(engine.world, ball.body);
-      ballsRef.current = ballsRef.current.filter((b) => b !== ball);
-      commitLanding(slot, now, ball.onLand);
+    function advancePlaybackBalls(ts: number) {
+      const remaining: PlaybackBall[] = [];
+      for (const pb of playbackBallsRef.current) {
+        if (pb.landed) continue;
+        const elapsed = ts - pb.startTs;
+        const frameIdx = Math.floor(elapsed / FRAME_DT_MS);
+
+        // Fire peg-hit effects whose recorded frame we've now passed.
+        while (
+          pb.nextPegHitIdx < pb.pegHits.length &&
+          pb.pegHits[pb.nextPegHitIdx].frame <= frameIdx
+        ) {
+          const hit = pb.pegHits[pb.nextPegHitIdx];
+          ringsRef.current.push({ x: hit.x, y: hit.y, t0: ts });
+          if (ringsRef.current.length > 32) {
+            ringsRef.current.splice(0, ringsRef.current.length - 32);
+          }
+          playPegHit();
+          pb.nextPegHitIdx++;
+        }
+
+        if (frameIdx >= pb.trajectory.length - 1) {
+          pb.landed = true;
+          commitLanding(pb.targetSlot, ts, pb.onLand);
+          continue;
+        }
+        remaining.push(pb);
+      }
+      playbackBallsRef.current = remaining;
     }
 
-    // ─── Render loop ────────────────────────────────────────────────────────
-    const slotWidth = geo.gap;
-    let prevTs = 0;
+    function ballPosition(pb: PlaybackBall, ts: number) {
+      const elapsed = ts - pb.startTs;
+      const f = elapsed / FRAME_DT_MS;
+      const i = Math.min(pb.trajectory.length - 1, Math.max(0, Math.floor(f)));
+      const j = Math.min(pb.trajectory.length - 1, i + 1);
+      const t = f - i;
+      const a = pb.trajectory[i];
+      const b = pb.trajectory[j];
+      return { x: a[0] + (b[0] - a[0]) * t, y: a[1] + (b[1] - a[1]) * t };
+    }
+
+    function drawBall(x: number, y: number) {
+      if (!ctx) return;
+      ctx.save();
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = 'rgba(255, 48, 48, 0.55)';
+      ctx.beginPath();
+      ctx.arc(x, y, geo.ballR, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff3030';
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+      ctx.restore();
+    }
 
     function draw(ts: number) {
       if (!ctx) return;
-      const dt = prevTs ? Math.min(ts - prevTs, 50) : 1000 / 60;
-      prevTs = ts;
-      Matter.Engine.update(engine, dt);
+      advancePlaybackBalls(ts);
 
       // Background
       ctx.fillStyle = '#0e1b2a';
       ctx.fillRect(0, 0, geo.boardW, geo.boardH);
 
-      // Faint vertical rails for depth
+      // Faint vertical rails
       ctx.strokeStyle = 'rgba(34, 55, 79, 0.55)';
       ctx.lineWidth = 1;
       for (let i = 1; i < 8; i++) {
         const gx = (geo.boardW / 8) * i;
         ctx.beginPath();
         ctx.moveTo(gx, 36);
-        ctx.lineTo(gx, geo.slotY - 8);
+        ctx.lineTo(gx, geo.bucketY - geo.bucketH / 2 - 8);
         ctx.stroke();
       }
 
@@ -374,22 +240,24 @@ const PlinkoBoard = forwardRef<
 
         const isActive = activeSl === i;
         const isHov = hovSl === i;
+        const slotW = geo.pegGap;
+        const slotTop = geo.bucketY - geo.bucketH / 2;
 
         ctx.beginPath();
         ctx.rect(
-          sx - slotWidth / 2 + 2,
-          geo.slotY + yOffset,
-          slotWidth - 4,
-          geo.slotH,
+          sx - slotW / 2 + 2,
+          slotTop + yOffset,
+          slotW - 4,
+          geo.bucketH,
         );
         ctx.fillStyle = color;
         ctx.fill();
 
         const sheen = ctx.createLinearGradient(
           0,
-          geo.slotY + yOffset,
+          slotTop + yOffset,
           0,
-          geo.slotY + yOffset + geo.slotH,
+          slotTop + yOffset + geo.bucketH,
         );
         sheen.addColorStop(0, 'rgba(255,255,255,0.22)');
         sheen.addColorStop(1, 'rgba(0,0,0,0.15)');
@@ -409,18 +277,24 @@ const PlinkoBoard = forwardRef<
         ctx.font = `700 ${fontSize}px 'JetBrains Mono', ui-monospace, monospace`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(formatMultiplier(mult), sx, geo.slotY + yOffset + geo.slotH / 2);
+        ctx.fillText(
+          formatMultiplier(mult),
+          sx,
+          slotTop + yOffset + geo.bucketH / 2,
+        );
       }
 
       // Pegs
-      for (const peg of pegBodiesRef.current) {
+      for (const peg of pegs) {
         ctx.beginPath();
-        ctx.arc(peg.position.x, peg.position.y, geo.pegR, 0, Math.PI * 2);
+        ctx.arc(peg.x, peg.y, geo.pegR, 0, Math.PI * 2);
         ctx.fillStyle = '#ffffff';
         ctx.fill();
       }
 
       // Peg-hit rings
+      const ringCut = ts - RING_DURATION_MS;
+      ringsRef.current = ringsRef.current.filter((r) => r.t0 >= ringCut);
       for (const ring of ringsRef.current) {
         const u = Math.min(1, (ts - ring.t0) / RING_DURATION_MS);
         const r = geo.pegR + (18 - geo.pegR) * u;
@@ -432,29 +306,24 @@ const PlinkoBoard = forwardRef<
         ctx.stroke();
       }
 
+      // Bucket-bounce GC
+      const bucketCut = ts - BUCKET_BOUNCE_MS;
+      if (
+        bucketAnimsRef.current.length &&
+        bucketAnimsRef.current[0].t0 < bucketCut
+      ) {
+        bucketAnimsRef.current = bucketAnimsRef.current.filter(
+          (b) => b.t0 >= bucketCut,
+        );
+      }
+
       // Balls
-      for (const ball of ballsRef.current) {
-        const { x, y } = ball.body.position;
+      for (const pb of playbackBallsRef.current) {
+        const { x, y } = ballPosition(pb, ts);
         drawBall(x, y);
       }
 
       rafRef.current = requestAnimationFrame(draw);
-    }
-
-    function drawBall(x: number, y: number) {
-      if (!ctx) return;
-      ctx.save();
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = 'rgba(255, 48, 48, 0.55)';
-      ctx.beginPath();
-      ctx.arc(x, y, geo.ballR, 0, Math.PI * 2);
-      ctx.fillStyle = '#ff3030';
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#ffffff';
-      ctx.stroke();
-      ctx.restore();
     }
 
     cancelAnimationFrame(rafRef.current);
@@ -463,64 +332,35 @@ const PlinkoBoard = forwardRef<
 
     return () => {
       cancelAnimationFrame(rafRef.current);
-      Matter.Events.off(engine, 'beforeUpdate');
-      Matter.Events.off(engine, 'collisionStart');
-      Matter.Engine.clear(engine);
-      engineRef.current = null;
-      ballsRef.current = [];
+      playbackBallsRef.current = [];
       ringsRef.current = [];
       bucketAnimsRef.current = [];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, geo]);
+  }, [rows, geo, pegs, multipliers]);
 
-  // ─── Expose addBall ────────────────────────────────────────────────────────
   useImperativeHandle(
     ref,
     () => ({
-      addBall(path, onLand) {
-        const engine = engineRef.current;
-        if (!engine) return false;
-        if (ballsRef.current.length >= MAX_PLINKO_BALLS) return false;
-        if (path.length !== rows) return false;
-
-        const targetSlot = path.filter(Boolean).length;
-        const jitter = (Math.random() - 0.5) * 8;
-        const now = performance.now();
-        const body = Matter.Bodies.circle(
-          geo.centerX + jitter,
-          geo.topY - geo.ballR * 2,
-          geo.ballR,
-          {
-            restitution: BALL_RESTITUTION,
-            friction: 0.02,
-            frictionAir: BALL_FRICTION_AIR,
-            density: BALL_DENSITY,
-            label: 'ball',
-            collisionFilter: { category: CAT_BALL, mask: CAT_PEG | CAT_WALL },
-          },
-        );
-        const initDir = path[0] ? 1 : -1;
-        Matter.Body.setVelocity(body, { x: initDir * 1.0, y: 0.6 });
-
-        Matter.World.add(engine.world, body);
-        ballsRef.current.push({
-          body,
-          path,
+      addPlaybackBall(trajectory, pegHits, targetSlot, onLand) {
+        if (playbackBallsRef.current.length >= MAX_PLINKO_BALLS) return false;
+        if (!trajectory || trajectory.length < 2) return false;
+        playbackBallsRef.current.push({
+          id: ++ballSeqRef.current,
+          trajectory,
+          pegHits: pegHits ?? [],
+          nextPegHitIdx: 0,
+          startTs: performance.now(),
           targetSlot,
-          lastGuidedRow: -1,
           landed: false,
-          spawnTs: now,
-          lastMotionTs: now,
           onLand,
         });
         return true;
       },
     }),
-    [rows, geo],
+    [],
   );
 
-  // ─── Hover detection ──────────────────────────────────────────────────────
   function handleMouseMove(e: React.MouseEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -528,9 +368,12 @@ const PlinkoBoard = forwardRef<
     const mx = (e.clientX - rect.left) * (geo.boardW / rect.width);
     const my = (e.clientY - rect.top) * (geo.boardH / rect.height);
 
-    if (my >= geo.slotY && my <= geo.slotY + geo.slotH) {
-      const leftEdge = geo.centerX - (rows * geo.gap) / 2;
-      const idx = Math.round((mx - leftEdge) / geo.gap);
+    if (
+      my >= geo.bucketY - geo.bucketH / 2 &&
+      my <= geo.bucketY + geo.bucketH / 2
+    ) {
+      const leftEdge = geo.centerX - (rows * geo.pegGap) / 2;
+      const idx = Math.round((mx - leftEdge) / geo.pegGap);
       if (idx >= 0 && idx <= rows) {
         setHoveredSlot(idx);
         return;
@@ -591,7 +434,8 @@ const PlinkoBoard = forwardRef<
       <div className="flex h-6 items-center justify-center font-mono text-[11px] text-[var(--degen-ink-dim,#8ea3bb)]">
         {hInfo ? (
           <span>
-            Slot {hInfo.slot} · P: {(hInfo.prob * 100).toFixed(2)}% · Payout: {formatMultiplier(hInfo.mult)}
+            Slot {hInfo.slot} · P: {(hInfo.prob * 100).toFixed(2)}% · Payout:{' '}
+            {formatMultiplier(hInfo.mult)}
           </span>
         ) : (
           <span className="opacity-40">hover a bin to see odds</span>

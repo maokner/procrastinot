@@ -12,11 +12,18 @@ import {
   multiplierColor,
   type PlinkoRows,
 } from '@/lib/plinko';
+import { simulatePlinko } from '@/lib/plinko-sim';
 
-// Local fake path generator — matches the shape the server would return
-// (array of booleans, one per row, where true = right).
-function fakePath(rows: PlinkoRows): boolean[] {
-  return Array.from({ length: rows }, () => Math.random() < 0.5);
+// Generate 32 random bytes for a client-side seed. Matches what the live
+// server passes to simulatePlinko in production.
+function randomSeed(): Uint8Array {
+  const bytes = new Uint8Array(32);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  return bytes;
 }
 
 type LandedDrop = {
@@ -55,7 +62,13 @@ export default function DemoClient() {
       );
     };
 
-    const added = boardRef.current?.addBall(fakePath(rows), onLand);
+    const sim = simulatePlinko(randomSeed(), rows);
+    const added = boardRef.current?.addPlaybackBall(
+      sim.trajectory,
+      sim.pegHits,
+      sim.slot,
+      onLand,
+    );
     if (added) setInFlight((n) => n + 1);
   }
 

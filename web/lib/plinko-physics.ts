@@ -1,64 +1,71 @@
-// Geometry + animation tunables shared by the renderer (PlinkoBoard) and
-// any debug script. The slot outcome is decided by the math engine in
-// lib/plinko.ts — these constants only affect the visual ball animation.
+// Plinko physics + geometry. The sim is pure Matter.js — no guidance, no
+// attractor. The ball lands wherever physics decides; the bucket index is
+// read from collision sensors at the bottom of the board.
+//
+// Physics tunables follow the kayooliveira/plinko-game pattern (super-
+// elastic balls, per-ball randomized restitution/friction, heavy air drag),
+// scaled up for a 720×760 logical canvas.
 
 import type { PlinkoRows } from './plinko';
 
 // Engine
 export const FIXED_DT_MS = 1000 / 60;
-export const MAX_SIM_STEPS = 800; // safety cap — only used by debug scripts
+export const MAX_SIM_STEPS = 1200; // safety cap; long enough for a slow ball
+export const GRAVITY_Y = 1.0;
 
-// Animation tunables (used by the live PlinkoBoard renderer)
-export const GRAVITY_Y = 0.85;
+// Per-ball physics — randomized inside these bands so each drop plays
+// differently. Restitution > 1 is super-elastic (gains energy on bounce);
+// it produces lively cascading falls combined with the heavy air drag.
+export const BALL_RESTITUTION_MIN = 0.95;
+export const BALL_RESTITUTION_MAX = 1.25;
+export const BALL_FRICTION_MIN = 0.55;
+export const BALL_FRICTION_MAX = 0.8;
+export const BALL_FRICTION_AIR = 0.055;
+export const BALL_DENSITY = 0.005;
+
+// Static body parameters
 export const PEG_RESTITUTION = 0.5;
-export const BALL_RESTITUTION = 0.35;
-export const BALL_FRICTION_AIR = 0.012;
-export const BALL_DENSITY = 0.003;
+export const WALL_RESTITUTION = 0.2;
 
-// Guidance constants for path-driven balls.
-export const GUIDE_MIN_SPEED = 3.4;
-export const TARGET_ATTRACTION = 0.0009;
-
-// Cleanup thresholds
-export const STUCK_MIN_SPEED_SQ = 0.5 * 0.5;
-export const STUCK_TIMEOUT_MS = 1500;
-export const MAX_BALL_LIFETIME_MS = 8000;
-
-// Collision categories — keeps balls from piling up on each other.
+// Collision categories
 export const CAT_PEG = 0x0001;
 export const CAT_WALL = 0x0002;
 export const CAT_BALL = 0x0004;
+export const CAT_BUCKET = 0x0008;
 
 export type Geometry = {
   boardW: number;
   boardH: number;
   centerX: number;
   topY: number;
-  pegSpan: number; // total horizontal span of the bottom row of pegs
-  rowGap: number; // vertical pixels between adjacent peg rows
-  gap: number; // horizontal pixels between adjacent pegs in the same row
+  pegSpan: number; // total horizontal span of bottom-row pegs
+  rowGap: number;
+  pegGap: number;
   pegR: number;
   ballR: number;
-  slotY: number; // y at which buckets start (top of bucket box)
-  slotH: number; // bucket height
+  bucketY: number; // y-center of bucket sensor row
+  bucketH: number;
+  spawnYOffset: number; // ball spawned this many px above topY
+  spawnJitter: number; // ±jitter from canvas center for ball spawn x
 };
 
-// Per-row geometry. 16-row gets a wider board with slightly smaller pegs/balls
-// so the cone has room to breathe and balls visibly drop into buckets without
-// being squeezed against pegs.
+// Galton layout: row r (1..n) has r pegs. Bottom row has `rows` pegs and
+// `rows+1` buckets between/beside them. The ball spawns above the single
+// top peg and cascades down `rows` decision rows.
 export function getBoardGeometry(rows: PlinkoRows): Geometry {
   const boardW = 720;
   const boardH = 760;
   const centerX = boardW / 2;
-  const topY = 50;
-  const slotY = 700;
-  const slotH = 44;
-  const pegSpan = 600;
-  const gap = pegSpan / rows;
-  // 30 px breathing room between the last peg row and the bucket lip.
-  const rowGap = (slotY - topY - 30) / rows;
+  // pegGap controls cone width. Smaller = tighter cone, more central
+  // outcomes. We keep ball-to-gap ratio ~0.25 (kayoo's value).
+  const pegGap = rows === 16 ? 32 : rows === 12 ? 42 : 56;
+  const pegSpan = pegGap * (rows - 1);
+  const rowGap = rows === 16 ? 36 : rows === 12 ? 46 : 60;
   const pegR = rows === 16 ? 4 : rows === 12 ? 5 : 6;
   const ballR = rows === 16 ? 7 : rows === 12 ? 8 : 9;
+  const topY = 80;
+  const bucketY = topY + rows * rowGap + 60;
+  const bucketH = 32;
   return {
     boardW,
     boardH,
@@ -66,24 +73,26 @@ export function getBoardGeometry(rows: PlinkoRows): Geometry {
     topY,
     pegSpan,
     rowGap,
-    gap,
+    pegGap,
     pegR,
     ballR,
-    slotY,
-    slotH,
+    bucketY,
+    bucketH,
+    spawnYOffset: 30,
+    spawnJitter: 2.5,
   };
 }
 
-/** All peg positions for a given board. Pyramid: row r has r+1 pegs. */
+/** Galton-board peg layout: row r has r pegs. */
 export function pegLayout(
   rows: PlinkoRows,
   geo: Geometry = getBoardGeometry(rows),
 ): { x: number; y: number }[] {
   const pegs: { x: number; y: number }[] = [];
   for (let r = 1; r <= rows; r++) {
-    for (let c = 0; c <= r; c++) {
+    for (let c = 0; c < r; c++) {
       pegs.push({
-        x: geo.centerX + (2 * c - r) * (geo.gap / 2),
+        x: geo.centerX + (2 * c - (r - 1)) * (geo.pegGap / 2),
         y: geo.topY + r * geo.rowGap,
       });
     }
@@ -91,27 +100,18 @@ export function pegLayout(
   return pegs;
 }
 
-/** X-coordinate of bucket k (k in [0..rows]). Buckets line up with the
- * bottom row of pegs so the ball's final x maps cleanly to bucket index. */
+/** Bucket center x for slot k in [0..rows]. Buckets sit between adjacent
+ * bottom-row pegs (and against the walls at the extremes). */
 export function bucketCenterX(
   slot: number,
   rows: PlinkoRows,
   geo: Geometry = getBoardGeometry(rows),
 ): number {
-  return geo.centerX + (2 * slot - rows) * (geo.gap / 2);
+  return geo.centerX + (2 * slot - rows) * (geo.pegGap / 2);
 }
 
-export function slotForX(
-  x: number,
-  rows: PlinkoRows,
-  geo: Geometry = getBoardGeometry(rows),
-): number {
-  const leftEdge = geo.centerX - (rows * geo.gap) / 2;
-  const idx = Math.round((x - leftEdge) / geo.gap);
-  return Math.max(0, Math.min(rows, idx));
-}
-
-// Mulberry32 — small fast PRNG. Useful for seeded debug scripts.
+// Mulberry32 — fast deterministic PRNG seeded from HMAC bytes so the same
+// (serverSeed, clientSeed, nonce) always produces the same drop.
 export function mulberry32(seed: number): () => number {
   let s = seed >>> 0;
   return function () {

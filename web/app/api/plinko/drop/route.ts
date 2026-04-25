@@ -6,7 +6,6 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import {
   DEFAULT_RISK,
   MIN_BET_UNITS,
-  binomialProbabilities,
   expectedValue,
   getMultipliers,
   isPlinkoRows,
@@ -15,6 +14,7 @@ import {
   unitsToUsdc,
   type RiskLevel,
 } from '@/lib/plinko';
+import { simulatePlinko } from '@/lib/plinko-sim';
 
 export const runtime = 'nodejs';
 
@@ -61,17 +61,17 @@ export async function POST(request: NextRequest) {
   hmac.update(`${clientSeed}:${nonce}`);
   const digest = hmac.digest();
 
-  // Fair binomial draw: each row is a 50/50 left/right decision derived
-  // from one bit of the HMAC digest. The bucket index is the count of
-  // "right" choices, which gives P(k) = C(n,k)/2^n.
-  const pathBits: boolean[] = [];
-  for (let i = 0; i < rows; i += 1) {
-    const byteIndex = Math.floor(i / 8);
-    const bitIndex = i % 8;
-    pathBits.push(((digest[byteIndex] >> (7 - bitIndex)) & 1) === 1);
-  }
-  const path = pathBits.map((bit) => (bit ? '1' : '0')).join('');
-  const slot = pathBits.filter(Boolean).length;
+  // Pure-physics simulation: Matter.js runs the ball drop with per-drop
+  // randomization seeded from the HMAC digest. The slot is whichever bucket
+  // sensor the ball lands on. The trajectory is recorded so the client can
+  // replay the exact same drop visually. Anyone with serverSeed can re-run
+  // simulatePlinko and verify that this slot is what the physics produced.
+  const sim = simulatePlinko(new Uint8Array(digest), rows);
+  const slot = sim.slot;
+  // Schema-required audit string. Pure-physics drops have no bit path; we
+  // store the HMAC digest hex so the drop can be replayed by re-running
+  // simulatePlinko(digest, rows).
+  const path = digest.toString('hex');
 
   const multipliers = getMultipliers(rows, risk);
   const multiplier = multipliers[slot];
@@ -79,12 +79,11 @@ export async function POST(request: NextRequest) {
     (ballValueUnits * BigInt(Math.round(multiplier * 1_000_000))) / 1_000_000n;
   const serverSeedHash = createHash('sha256').update(serverSeedBuffer).digest('hex');
 
-  // Debug log — verify EV math agrees with targetRTP. Cheap; once memoized
-  // the multiplier table only computes once per (rows, risk) per process.
-  const probs = binomialProbabilities(rows);
+  // Debug log — closed-form EV against binomial; actual physics distribution
+  // tends to be slightly more central, so realized EV is slightly below this.
   const closedFormEV = expectedValue(rows, risk);
   console.log(
-    `[plinko] rows=${rows} risk=${risk} slot=${slot} mult=${multiplier.toFixed(4)} EV=${closedFormEV.toFixed(4)} P(slot)=${probs[slot].toFixed(6)}`,
+    `[plinko] rows=${rows} risk=${risk} slot=${slot} mult=${multiplier.toFixed(4)} closedEV=${closedFormEV.toFixed(4)} frames=${sim.trajectory.length}`,
   );
 
   const admin = supabaseAdmin();
@@ -128,7 +127,6 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     dropId: result.drop_id,
     risk,
-    path: pathBits,
     slot,
     multiplier,
     multipliers,
@@ -138,5 +136,7 @@ export async function POST(request: NextRequest) {
     serverSeed,
     serverSeedHash,
     clientSeed,
+    trajectory: sim.trajectory,
+    pegHits: sim.pegHits,
   });
 }
