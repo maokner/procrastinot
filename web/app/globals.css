@@ -554,3 +554,224 @@ select {
     font-size: 3rem;
   }
 }
+
+/* ── Degen Mode palette ──────────────────────────────────────────────
+   Scoped via .pn-degen on the page root so it applies only to /degen
+   and /demo/plinko without leaking into the monochrome commitment app. */
+
+/* When a Degen page is mounted, swap the body / html bg so the dark navy
+   fills the entire viewport (including any space above the page wrapper
+   and the rubber-band overscroll area on iOS). The `:has()` selector is
+   widely supported (Chrome 105+, Safari 15.4+, Firefox 121+). */
+html:has(.pn-degen),
+body:has(.pn-degen) {
+  background: #0e1b2a;
+  color: #f5f7fa;
+}
+
+body:has(.pn-degen)::before,
+body:has(.pn-degen)::after {
+  display: none;
+}
+
+.pn-degen {
+  --degen-bg: #0e1b2a;
+  --degen-bg-soft: #14263a;
+  --degen-panel: #0a1622;
+  --degen-panel-border: #22374f;
+  --degen-ink: #f5f7fa;
+  --degen-ink-dim: #8ea3bb;
+  --degen-line: #22374f;
+  --degen-ball: #ff3030;
+  --degen-ball-ring: #ffffff;
+  --degen-peg: #ffffff;
+  --degen-accent: #ffd23f;
+  --degen-win: #22d37a;
+  --degen-loss: #ff5544;
+  background: var(--degen-bg);
+  color: var(--degen-ink);
+  font-family: var(--font-ui), 'Helvetica Neue', sans-serif;
+  min-height: 100vh;
+}
+
+.pn-degen .pn-title,
+.pn-degen .pn-kicker,
+.pn-degen .pn-label {
+  color: var(--degen-ink);
+}
+
+.pn-degen .pn-kicker,
+.pn-degen .pn-label {
+  color: var(--degen-ink-dim);
+}
+
+.pn-degen-card {
+  border: 1px solid var(--degen-panel-border);
+  background: var(--degen-panel);
+  color: var(--degen-ink);
+}
+
+.pn-degen-marquee {
+  border-bottom: 4px solid var(--degen-panel-border);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 210, 63, 0.06) 0%,
+    transparent 100%
+  );
+}
+
+.pn-degen-board-frame {
+  border: 1px solid var(--degen-panel-border);
+  background: var(--degen-bg-soft);
+  padding: 0.5rem;
+}
+
+.pn-degen-input {
+  width: 100%;
+  border: 1px solid var(--degen-panel-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--degen-ink);
+  padding: 0.75rem 0.9rem;
+  font-family: var(--font-mono), monospace;
+  transition: border-color 100ms linear, background-color 100ms linear;
+}
+
+.pn-degen-input:focus {
+  outline: none;
+  border-color: var(--degen-accent);
+  background: rgba(255, 210, 63, 0.06);
+}
+
+.pn-degen-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid var(--degen-panel-border);
+  padding: 0.8rem 1.2rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  line-height: 1.1;
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--degen-ink);
+  transition:
+    background-color 100ms linear,
+    border-color 100ms linear,
+    color 100ms linear,
+    transform 120ms ease-out;
+}
+
+.pn-degen-btn:hover:not(:disabled) {
+  border-color: var(--degen-accent);
+  color: var(--degen-accent);
+}
+
+.pn-degen-btn:focus-visible {
+  outline: 2px solid var(--degen-accent);
+  outline-offset: 2px;
+}
+
+.pn-degen-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.pn-degen-btn-primary {
+  background: var(--degen-ball);
+  border-color: var(--degen-ball);
+  color: #ffffff;
+}
+
+.pn-degen-btn-primary:hover:not(:disabled) {
+  background: #ff5050;
+  border-color: #ff5050;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.pn-degen-btn-accent {
+  background: var(--degen-accent);
+  border-color: var(--degen-accent);
+  color: #1a1a1a;
+}
+
+.pn-degen-btn-accent:hover:not(:disabled) {
+  background: #ffde6b;
+  border-color: #ffde6b;
+  color: #1a1a1a;
+}
+
+.pn-degen-pill {
+  border: 1px solid var(--degen-panel-border);
+  padding: 0.55rem 0.6rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  color: var(--degen-ink-dim);
+  background: transparent;
+  transition: background-color 100ms linear, color 100ms linear;
+}
+
+.pn-degen-pill[data-active='true'] {
+  background: var(--degen-ink);
+  color: var(--degen-bg);
+  border-color: var(--degen-ink);
+}
+
+.pn-degen-pill:hover:not([data-active='true']):not(:disabled) {
+  color: var(--degen-ink);
+  border-color: var(--degen-ink-dim);
+}
+
+.pn-degen-flash {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  font-family: var(--font-mono), monospace;
+  font-weight: 700;
+  font-size: clamp(2.5rem, 8vw, 5rem);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  animation: pn-degen-flash 700ms ease-out forwards;
+  text-shadow: 0 2px 24px currentColor;
+}
+
+.pn-degen-flash[data-result='win'] {
+  color: var(--degen-win);
+}
+
+.pn-degen-flash[data-result='miss'] {
+  color: var(--degen-loss);
+}
+
+@keyframes pn-degen-flash {
+  0% { opacity: 0; transform: scale(0.8); }
+  20% { opacity: 1; transform: scale(1.08); }
+  40% { transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pn-degen-flash {
+    animation: pn-degen-flash 150ms linear forwards;
+  }
+}
+
+@media (max-width: 768px) {
+  .pn-degen-mobile-sticky {
+    position: sticky;
+    bottom: 0;
+    z-index: 30;
+    background: var(--degen-panel);
+    border-top: 1px solid var(--degen-panel-border);
+    padding: 0.75rem;
+    margin-inline: -1rem;
+  }
+}
+

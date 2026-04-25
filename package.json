@@ -7,8 +7,10 @@
     "dev:oracle": "pnpm --filter oracle dev",
     "dev:indexer": "pnpm --filter indexer dev",
     "dev:web": "pnpm --filter web dev",
+    "plinko:demo": "pnpm --filter web dev",
     "build": "pnpm -r build",
     "test:contracts": "cd contracts && forge test -vvv",
+    "test:web": "pnpm --filter web test",
     "sync:abi": "tsx scripts/sync-abi.ts",
     "distribute:env": "tsx scripts/distribute-supabase-env.ts"
   },

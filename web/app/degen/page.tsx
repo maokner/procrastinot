@@ -31,7 +31,11 @@ type DropResult = {
   serverSeed: string;
   serverSeedHash: string;
   clientSeed: string;
+  trajectory: number[][];
+  pegHits: { frame: number; x: number; y: number }[];
 };
+
+type Flash = { key: number; result: 'win' | 'miss'; multiplier: number };
 
 function compactHash(hash: string) {
   return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
@@ -50,9 +54,9 @@ export default function DegenPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<DropResult | null>(null);
   const [boardReady, setBoardReady] = useState(false);
+  const [flash, setFlash] = useState<Flash | null>(null);
 
   const boardRef = useRef<PlinkoBoardHandle>(null);
-  // Suppresses realtime balance updates while any ball is in flight
   const droppingRef = useRef(false);
   const pendingDropsRef = useRef<PlinkoDrop[]>([]);
   const ballsInFlightRef = useRef(0);
@@ -60,6 +64,19 @@ export default function DegenPage() {
   const balanceUnitsRef = useRef(0);
   const currentBetUnitsRef = useRef<number | null>(null);
   const holdIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const flashSeqRef = useRef(0);
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function triggerFlash(multiplier: number) {
+    const next: Flash = {
+      key: ++flashSeqRef.current,
+      result: multiplier >= 1 ? 'win' : 'miss',
+      multiplier,
+    };
+    setFlash(next);
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    flashTimerRef.current = setTimeout(() => setFlash(null), 700);
+  }
 
   // ── Initial load ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -178,9 +195,13 @@ export default function DegenPage() {
       const data = (await res.json()) as DropResult & { error?: string };
       if (!res.ok) throw new Error(data.error ?? 'Drop failed');
 
-      const added = boardRef.current?.addBall(data.path, (slot) => {
-        // Ball has physically landed — update balance and result
+      const added = boardRef.current?.addPlaybackBall(
+        data.trajectory,
+        data.pegHits,
+        data.slot,
+        (slot) => {
         setLastResult({ ...data, slot });
+        triggerFlash(data.multiplier);
         releaseReservation();
         setBalance((prev) =>
           prev
@@ -207,10 +228,10 @@ export default function DegenPage() {
         }
       });
 
-      // Board at capacity — decrement counter we just incremented
       if (!added) {
         releaseReservation();
         setLastResult(data);
+        triggerFlash(data.multiplier);
         setBalance((prev) =>
           prev
             ? { ...prev, balance_usdc: Math.round(Number(data.balanceAfter) * 1_000_000) }
@@ -251,8 +272,13 @@ export default function DegenPage() {
     }
   }
 
-  // Clean up hold interval on unmount
-  useEffect(() => () => stopHolding(), []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(
+    () => () => {
+      stopHolding();
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    },
+    [],
+  ); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Cashout handler ───────────────────────────────────────────────────
   async function handleCashout() {
@@ -288,171 +314,214 @@ export default function DegenPage() {
   const activeSlot = lastResult?.slot ?? null;
 
   return (
-    <main className="pn-page max-w-7xl">
-      <Link href="/my" className="pn-backlink mb-5">Back to commitments</Link>
+    <main className="pn-degen min-h-screen">
+      <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
+        <Link
+          href="/my"
+          className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--degen-ink-dim)] hover:text-[var(--degen-accent)]"
+        >
+          ← Back to commitments
+        </Link>
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <section className="min-w-0">
-          <div className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b-4 border-black pb-5">
-            <div>
-              <p className="pn-kicker mb-2">Degen Mode</p>
-              <h1 className="pn-title text-5xl sm:text-6xl">Plinko</h1>
-            </div>
-            <div className="text-right">
-              <p className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--ink-2)]">Playing balance</p>
-              <p className="font-mono text-3xl font-semibold">{balanceText}</p>
-              <p className="font-mono text-xs text-[var(--ink-2)]">USDC</p>
-            </div>
+        <header className="pn-degen-marquee mt-5 mb-8 flex flex-wrap items-end justify-between gap-4 pb-5">
+          <div>
+            <p className="pn-kicker mb-1">Degen Mode</p>
+            <h1 className="font-mono text-5xl font-bold tracking-tight sm:text-6xl">
+              Plinko
+            </h1>
           </div>
+          <div className="text-right">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--degen-ink-dim)]">
+              Playing balance
+            </p>
+            <p className="font-mono text-4xl font-semibold text-[var(--degen-accent)]">
+              {balanceText}
+            </p>
+            <p className="font-mono text-[11px] text-[var(--degen-ink-dim)]">USDC</p>
+          </div>
+        </header>
 
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_17rem]">
-            <div className="border border-black bg-[var(--bg-0)] p-3">
-              <PlinkoBoard
-                ref={boardRef}
-                rows={rows}
-                activeSlot={activeSlot}
-                onReady={() => setBoardReady(true)}
-              />
-            </div>
-
-            <aside className="flex flex-col gap-5 border-t-4 border-black pt-5 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0">
-              <div>
-                <p className="mb-2 font-mono text-xs uppercase tracking-[0.16em] text-[var(--ink-2)]">Rows</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {PLINKO_ROWS.map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      onClick={() => {
-                        setBoardReady(false);
-                        setRows(option);
-                      }}
-                      disabled={ballsInFlight > 0}
-                      className={`pn-btn px-2 py-2 text-xs ${rows === option ? 'pn-btn-primary' : 'pn-btn-secondary'}`}
-                    >
-                      {option}
-                    </button>
-                  ))}
-                </div>
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <section className="min-w-0">
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
+              <div className="pn-degen-board-frame relative">
+                <PlinkoBoard
+                  ref={boardRef}
+                  rows={rows}
+                  activeSlot={activeSlot}
+                  onReady={() => setBoardReady(true)}
+                />
+                {flash && (
+                  <div
+                    key={flash.key}
+                    className="pn-degen-flash"
+                    data-result={flash.result}
+                  >
+                    {flash.result === 'win'
+                      ? `${flash.multiplier}x`
+                      : 'MISS'}
+                  </div>
+                )}
               </div>
 
-              <label className="flex flex-col gap-2">
-                <span className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--ink-2)]">Ball value</span>
-                <input
-                  value={ballValue}
-                  onChange={(e) => setBallValue(e.target.value)}
-                  inputMode="decimal"
-                  className="pn-input font-mono text-xl"
-                />
-                <input
-                  type="range"
-                  min={MIN_BET_USDC}
-                  max={maxBet}
-                  step="0.10"
-                  value={Math.min(Number(ballValue) || MIN_BET_USDC, maxBet)}
-                  onChange={(e) => setBallValue(Number(e.target.value).toFixed(2))}
-                  disabled={balanceUnits <= 0}
-                  className="w-full accent-black"
-                />
-              </label>
-
-              <label className="flex flex-col gap-2">
-                <span className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--ink-2)]">Client seed</span>
-                <input
-                  value={clientSeed}
-                  onChange={(e) => setClientSeed(e.target.value)}
-                  maxLength={128}
-                  className="pn-input font-mono text-sm"
-                />
-              </label>
-
-              <div className="flex flex-col gap-2">
-                <button
-                  type="button"
-                  onPointerDown={canDrop ? startHolding : undefined}
-                  onPointerUp={stopHolding}
-                  onPointerLeave={stopHolding}
-                  onPointerCancel={stopHolding}
-                  disabled={!canDrop}
-                  className="pn-btn pn-btn-primary w-full select-none"
-                >
-                  {ballsInFlight > 0
-                    ? `${ballsInFlight} in flight…`
-                    : 'Drop  (hold to keep dropping)'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleCashout()}
-                  disabled={!userId || balanceUnits <= 0 || cashoutPending}
-                  className="pn-btn pn-btn-secondary w-full"
-                >
-                  {cashoutPending ? 'Cashing out…' : 'Cash Out'}
-                </button>
-              </div>
-
-              {lastResult && (
-                <div className="border-t border-[var(--line)] pt-4 text-sm">
-                  <p className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--ink-2)]">Last drop</p>
-                  <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-xs">
-                    <span>Slot</span><span className="text-right">{lastResult.slot}</span>
-                    <span>Multiplier</span>
-                    <span className="text-right" style={{ color: multiplierColor(lastResult.multiplier) }}>
-                      {lastResult.multiplier}x
-                    </span>
-                    <span>Payout</span><span className="text-right">{lastResult.payout}</span>
-                    <span>Seed hash</span>
-                    <span className="truncate text-right">{compactHash(lastResult.serverSeedHash)}</span>
+              <aside className="flex flex-col gap-5">
+                <div>
+                  <p className="pn-kicker mb-2">Rows</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {PLINKO_ROWS.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        className="pn-degen-pill"
+                        data-active={rows === option}
+                        disabled={ballsInFlight > 0}
+                        onClick={() => {
+                          setBoardReady(false);
+                          setRows(option);
+                        }}
+                      >
+                        {option}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              )}
-            </aside>
-          </div>
-        </section>
 
-        <section className="border-t-4 border-black pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-          <h2 className="mb-4 font-mono text-xs uppercase tracking-[0.16em] text-[var(--ink-2)]">Recent drops</h2>
-          {drops.length === 0 ? (
-            <p className="text-sm text-[var(--ink-2)]">No drops yet.</p>
-          ) : (
-            <ul className="flex flex-col divide-y divide-[var(--line)]">
-              {drops.map((drop) => {
-                const net = drop.payout_usdc - drop.ball_value_usdc;
-                return (
-                  <li key={drop.id} className="grid grid-cols-[1fr_auto] gap-3 py-3 text-sm">
-                    <div className="min-w-0">
-                      <p className="font-mono text-xs">
-                        {unitsToUsdc(drop.ball_value_usdc)} → {unitsToUsdc(drop.payout_usdc)} USDC
-                      </p>
-                      <p className="truncate font-mono text-[10px] text-[var(--ink-2)]">
-                        {compactHash(drop.server_seed_hash)}
-                      </p>
-                    </div>
-                    <div className="text-right font-mono text-xs">
-                      <p style={{ color: multiplierColor(Number(drop.multiplier)) }}>
-                        {Number(drop.multiplier).toFixed(2)}x
-                      </p>
-                      <p className={net >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}>
-                        {net >= 0 ? '+' : ''}{unitsToUsdc(net)}
-                      </p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+                <label className="flex flex-col gap-2">
+                  <span className="pn-kicker">Ball value</span>
+                  <input
+                    value={ballValue}
+                    onChange={(e) => setBallValue(e.target.value)}
+                    inputMode="decimal"
+                    className="pn-degen-input text-xl"
+                  />
+                  <input
+                    type="range"
+                    min={MIN_BET_USDC}
+                    max={maxBet}
+                    step="0.10"
+                    value={Math.min(Number(ballValue) || MIN_BET_USDC, maxBet)}
+                    onChange={(e) => setBallValue(Number(e.target.value).toFixed(2))}
+                    disabled={balanceUnits <= 0}
+                    className="w-full accent-[var(--degen-accent)]"
+                  />
+                </label>
 
-          {(message ?? error) && (
-            <p
-              className={`mt-5 border p-3 text-sm ${
-                error
-                  ? 'border-[var(--danger)] text-[var(--danger)]'
-                  : 'border-black text-[var(--ink-0)]'
-              }`}
-            >
-              {error ?? message}
-            </p>
-          )}
-        </section>
+                <label className="flex flex-col gap-2">
+                  <span className="pn-kicker">Client seed</span>
+                  <input
+                    value={clientSeed}
+                    onChange={(e) => setClientSeed(e.target.value)}
+                    maxLength={128}
+                    className="pn-degen-input text-sm"
+                  />
+                </label>
+
+                <div className="pn-degen-mobile-sticky flex flex-col gap-2 md:static md:m-0 md:border-0 md:bg-transparent md:p-0">
+                  <button
+                    type="button"
+                    onPointerDown={canDrop ? startHolding : undefined}
+                    onPointerUp={stopHolding}
+                    onPointerLeave={stopHolding}
+                    onPointerCancel={stopHolding}
+                    disabled={!canDrop}
+                    className="pn-degen-btn pn-degen-btn-primary w-full select-none"
+                  >
+                    {ballsInFlight > 0
+                      ? `${ballsInFlight} in flight…`
+                      : 'Drop  (hold to repeat)'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleCashout()}
+                    disabled={!userId || balanceUnits <= 0 || cashoutPending}
+                    className="pn-degen-btn w-full"
+                  >
+                    {cashoutPending ? 'Cashing out…' : 'Cash Out'}
+                  </button>
+                </div>
+
+                {lastResult && (
+                  <div className="pn-degen-card p-3 text-sm">
+                    <p className="pn-kicker mb-2">Last drop</p>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-xs">
+                      <span className="text-[var(--degen-ink-dim)]">Slot</span>
+                      <span className="text-right">{lastResult.slot}</span>
+                      <span className="text-[var(--degen-ink-dim)]">Multiplier</span>
+                      <span
+                        className="text-right"
+                        style={{ color: multiplierColor(lastResult.multiplier) }}
+                      >
+                        {lastResult.multiplier}x
+                      </span>
+                      <span className="text-[var(--degen-ink-dim)]">Payout</span>
+                      <span className="text-right">{lastResult.payout}</span>
+                      <span className="text-[var(--degen-ink-dim)]">Seed hash</span>
+                      <span className="truncate text-right">
+                        {compactHash(lastResult.serverSeedHash)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </aside>
+            </div>
+          </section>
+
+          <section className="pn-degen-card p-4 lg:self-start">
+            <h2 className="pn-kicker mb-3">Recent drops</h2>
+            {drops.length === 0 ? (
+              <p className="font-mono text-sm text-[var(--degen-ink-dim)]">
+                No drops yet.
+              </p>
+            ) : (
+              <ul className="flex flex-col divide-y divide-[var(--degen-line)]">
+                {drops.map((drop) => {
+                  const net = drop.payout_usdc - drop.ball_value_usdc;
+                  const mult = Number(drop.multiplier);
+                  return (
+                    <li key={drop.id} className="grid grid-cols-[1fr_auto] gap-3 py-3 text-sm">
+                      <div className="min-w-0">
+                        <p className="font-mono text-xs">
+                          {unitsToUsdc(drop.ball_value_usdc)} → {unitsToUsdc(drop.payout_usdc)} USDC
+                        </p>
+                        <p className="truncate font-mono text-[10px] text-[var(--degen-ink-dim)]">
+                          {compactHash(drop.server_seed_hash)}
+                        </p>
+                      </div>
+                      <div className="text-right font-mono text-xs">
+                        <p style={{ color: multiplierColor(mult) }}>
+                          {mult.toFixed(2)}x
+                        </p>
+                        <p
+                          style={{
+                            color:
+                              net >= 0
+                                ? 'var(--degen-win)'
+                                : 'var(--degen-loss)',
+                          }}
+                        >
+                          {net >= 0 ? '+' : ''}
+                          {unitsToUsdc(net)}
+                        </p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            {(message ?? error) && (
+              <p
+                className={`mt-5 border p-3 text-sm ${
+                  error
+                    ? 'border-[var(--degen-loss)] text-[var(--degen-loss)]'
+                    : 'border-[var(--degen-accent)] text-[var(--degen-accent)]'
+                }`}
+              >
+                {error ?? message}
+              </p>
+            )}
+          </section>
+        </div>
       </div>
     </main>
   );

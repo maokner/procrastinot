@@ -11,6 +11,7 @@ import {
   parseUsdcToUnits,
   unitsToUsdc,
 } from '@/lib/plinko';
+import { simulatePlinko } from '@/lib/plinko-sim';
 
 export const runtime = 'nodejs';
 
@@ -47,14 +48,17 @@ export async function POST(request: NextRequest) {
   hmac.update(`${clientSeed}:${nonce}`);
   const digest = hmac.digest();
 
+  // Run the physics simulation server-side. The slot is whatever pure-physics
+  // produces with this seed; the bit-pattern below is preserved as audit data
+  // so anyone with `serverSeed` can re-run `simulatePlinko` and verify.
+  const sim = simulatePlinko(new Uint8Array(digest), rows);
+  const slot = sim.slot;
   const pathBits: boolean[] = [];
   for (let i = 0; i < rows; i += 1) {
     const byteIndex = Math.floor(i / 8);
     const bitIndex = i % 8;
     pathBits.push(((digest[byteIndex] >> (7 - bitIndex)) & 1) === 1);
   }
-
-  const slot = pathBits.filter(Boolean).length;
   const path = pathBits.map((bit) => (bit ? '1' : '0')).join('');
   const multiplier = MULTIPLIERS[rows][slot];
   const payoutUnits = (ballValueUnits * BigInt(Math.round(multiplier * 10_000))) / 10_000n;
@@ -109,5 +113,7 @@ export async function POST(request: NextRequest) {
     serverSeed,
     serverSeedHash,
     clientSeed,
+    trajectory: sim.trajectory,
+    pegHits: sim.pegHits,
   });
 }

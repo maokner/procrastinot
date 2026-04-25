@@ -34,12 +34,16 @@ export function parseUsdcToUnits(value: unknown): bigint | null {
   return BigInt(whole) * BigInt(USDC_UNITS) + BigInt(fraction.padEnd(6, '0'));
 }
 
-// Returns hex color for canvas or CSS use.
+// Returns hex color for canvas or CSS use. Tiered red -> yellow gradient
+// matches the Degen palette: jackpot-red at the edges, yellow near neutral,
+// muted blue-gray through the loss zone, saturated red for worst losses.
 export function multiplierColor(multiplier: number): string {
-  if (multiplier >= 5) return '#16a34a';   // green
-  if (multiplier >= 2) return '#b45309';   // amber
-  if (multiplier >= 1) return '#374151';   // dark gray
-  return '#dc2626';                         // red
+  if (multiplier >= 50) return '#ff2b2b';
+  if (multiplier >= 8) return '#ff6a1a';
+  if (multiplier >= 2) return '#ffa61a';
+  if (multiplier >= 1) return '#ffd23f';
+  if (multiplier >= 0.5) return '#5a6b84';
+  return '#ff5544';
 }
 
 // P(landing in slot k) = C(n,k) / 2^n, where n = number of rows.
