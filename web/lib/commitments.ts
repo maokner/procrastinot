@@ -31,7 +31,6 @@ export async function listMyCommitments(profileId: string, limit = 50) {
   const { data, error } = await sb
     .from('commitments')
     .select('*')
-    .eq('contract_address', CONTRACT_ADDRESS.toLowerCase())
     .or(`creator_profile.eq.${profileId},enemy_profile.eq.${profileId}`)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -45,7 +44,6 @@ export async function listInboxActive(profileId: string) {
   const { data, error } = await sb
     .from('commitments')
     .select('*')
-    .eq('contract_address', CONTRACT_ADDRESS.toLowerCase())
     .eq('enemy_profile', profileId)
     .eq('status', 'active')
     .order('deadline', { ascending: true });
@@ -59,7 +57,6 @@ export async function listInboxHistory(profileId: string, limit = 50) {
   const { data, error } = await sb
     .from('commitments')
     .select('*')
-    .eq('contract_address', CONTRACT_ADDRESS.toLowerCase())
     .eq('enemy_profile', profileId)
     .neq('status', 'active')
     .order('updated_at', { ascending: false })
@@ -99,7 +96,6 @@ export async function getProfileStats(profileId: string) {
   const { data, error } = await sb
     .from('commitments')
     .select('status, stake')
-    .eq('contract_address', CONTRACT_ADDRESS.toLowerCase())
     .eq('creator_profile', profileId);
   if (error) throw error;
   const rows = (data ?? []) as Pick<Commitment, 'status' | 'stake'>[];
@@ -119,7 +115,6 @@ export async function listPublicCommitments(profileId: string, limit = 50) {
   const { data, error } = await sb
     .from('commitments')
     .select('*')
-    .eq('contract_address', CONTRACT_ADDRESS.toLowerCase())
     .eq('creator_profile', profileId)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -133,7 +128,6 @@ export async function getEnemyStats(profileId: string) {
   const { data, error } = await sb
     .from('commitments')
     .select('status, stake')
-    .eq('contract_address', CONTRACT_ADDRESS.toLowerCase())
     .eq('enemy_profile', profileId);
   if (error) throw error;
   const rows = (data ?? []) as Pick<Commitment, 'status' | 'stake'>[];

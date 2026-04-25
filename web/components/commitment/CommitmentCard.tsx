@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { Commitment, Profile } from '@/lib/db-types';
+import { CONTRACT_ADDRESS } from '@/lib/contract';
 import { DeadlineCountdown } from './DeadlineCountdown';
 
 type ViewerRole = 'creator' | 'enemy';
@@ -28,6 +29,8 @@ export function CommitmentCard({
       ? `@${counterparty.username}`
       : shortAddr(role === 'creator' ? commitment.enemy_address : commitment.creator_address);
   const otherRoleLabel = role === 'creator' ? 'enemy' : 'creator';
+  const isHistorical =
+    commitment.contract_address.toLowerCase() !== CONTRACT_ADDRESS.toLowerCase();
 
   return (
     <li className="border-b border-[var(--line)] py-5 last:border-none">
@@ -38,10 +41,20 @@ export function CommitmentCard({
       >
         <div className="flex items-center justify-between">
           <span className="font-mono text-xs uppercase tracking-[0.16em]">#{commitment.id}</span>
-          <span
-            className={`inline-block border px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.16em] ${STATUS_CLASS[commitment.status] ?? ''}`}
-          >
-            {commitment.status}
+          <span className="flex items-center gap-2">
+            {isHistorical && (
+              <span
+                title={`From previous deployment ${shortAddr(commitment.contract_address)}`}
+                className="inline-block border border-[var(--line)] bg-[var(--bg-1)] px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--ink-2)]"
+              >
+                archived
+              </span>
+            )}
+            <span
+              className={`inline-block border px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.16em] ${STATUS_CLASS[commitment.status] ?? ''}`}
+            >
+              {commitment.status}
+            </span>
           </span>
         </div>
         <p className="line-clamp-2 text-lg leading-snug text-[var(--ink-1)]">{commitment.task}</p>

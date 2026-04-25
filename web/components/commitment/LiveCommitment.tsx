@@ -169,8 +169,22 @@ export function LiveCommitment({
     setSettleError(null);
     setSettleMessage(null);
 
+    if (mode === 'degen') {
+      // Fire-and-forget the oracle settlement and redirect immediately.
+      // /degen subscribes to realtime degen_balances updates and reflects
+      // the credit as soon as the oracle writes the row.
+      void fetch('/api/degen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commitmentId: String(commitment.id) }),
+        keepalive: true,
+      }).catch(() => {});
+      router.push(`/degen?pending=${commitment.id}`);
+      return;
+    }
+
     try {
-      const res = await fetch(mode === 'degen' ? '/api/degen' : '/api/withdraw', {
+      const res = await fetch('/api/withdraw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ commitmentId: String(commitment.id) }),
@@ -182,11 +196,6 @@ export function LiveCommitment({
 
       if (!res.ok) {
         throw new Error(data.error ?? 'Settlement failed');
-      }
-
-      if (mode === 'degen') {
-        router.push('/degen');
-        return;
       }
 
       setSettleMessage(

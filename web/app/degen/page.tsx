@@ -55,6 +55,7 @@ export default function DegenPage() {
   const [lastResult, setLastResult] = useState<DropResult | null>(null);
   const [boardReady, setBoardReady] = useState(false);
   const [flash, setFlash] = useState<Flash | null>(null);
+  const [creditPending, setCreditPending] = useState(false);
 
   const boardRef = useRef<PlinkoBoardHandle>(null);
   const droppingRef = useRef(false);
@@ -86,6 +87,20 @@ export default function DegenPage() {
     if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
     flashTimerRef.current = setTimeout(() => setFlash(null), 700);
   }
+
+  // ── Pending credit indicator ─────────────────────────────────────────────
+  // When the user just clicked "Enter degen mode", LiveCommitment redirects
+  // here with `?pending=<commitmentId>` while the oracle settles in the
+  // background. The flag clears on the first realtime balance update or
+  // after a 60s safety timeout.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('pending')) return;
+    setCreditPending(true);
+    const timeout = window.setTimeout(() => setCreditPending(false), 60_000);
+    return () => window.clearTimeout(timeout);
+  }, []);
 
   // ── Initial load ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -134,6 +149,7 @@ export default function DegenPage() {
             balanceUnitsRef.current = nextBalance.balance_usdc;
             setBalance(nextBalance);
           }
+          setCreditPending(false);
         },
       )
       .on(
@@ -337,6 +353,12 @@ export default function DegenPage() {
               {balanceText}
             </p>
             <p className="font-mono text-[11px] text-[var(--degen-ink-dim)]">USDC</p>
+            {creditPending && (
+              <p className="mt-1 inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--degen-accent)]">
+                <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--degen-accent)]" />
+                Crediting…
+              </p>
+            )}
           </div>
         </header>
 
