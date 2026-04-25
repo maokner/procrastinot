@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { supabaseBrowser } from '@/lib/supabase';
 import type { DegenBalance, PlinkoDrop } from '@/lib/db-types';
 import {
-  MAX_BET_USDC,
   MIN_BET_USDC,
   PLINKO_ROWS,
   type PlinkoRows,
@@ -185,10 +184,7 @@ export default function DegenPage() {
   useEffect(() => {
     currentBetUnitsRef.current = currentBetUnits;
   }, [currentBetUnits]);
-  const maxBet = Math.max(
-    MIN_BET_USDC,
-    Math.min(MAX_BET_USDC, availableBalanceUnits / 1_000_000),
-  );
+  const maxBet = Math.max(MIN_BET_USDC, availableBalanceUnits / 1_000_000);
 
   // ── Drop handler ───────────────────────────────────────────────────────
   async function handleDrop() {

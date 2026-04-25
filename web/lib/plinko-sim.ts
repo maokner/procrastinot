@@ -78,9 +78,11 @@ export function simulatePlinko(
     ];
     Matter.World.add(engine.world, [...pegBodies, ...walls]);
 
-    // Spawn the ball with seed-derived horizontal jitter so successive drops
-    // (different nonces) take different paths.
-    const jitter = (rng() - 0.5) * 12;
+    // Spawn jitter and initial-velocity ranges are calibrated together with
+    // PURE_BALL_OPTIONS — see scripts/plinko-calibrate.ts. Half-width 60px
+    // of horizontal jitter and ±1.0 of initial Vx give enough variance for
+    // 16-row to produce a non-degenerate distribution while keeping EV<1.
+    const jitter = (rng() - 0.5) * 120;
     const ball = Matter.Bodies.circle(
       CENTER_X + jitter,
       TOP_Y - BALL_R * 2,
@@ -92,7 +94,7 @@ export function simulatePlinko(
       },
     );
     Matter.Body.setVelocity(ball, {
-      x: (rng() - 0.5) * 0.6,
+      x: (rng() - 0.5) * 2.0,
       y: 0.4,
     });
     Matter.World.add(engine.world, ball);

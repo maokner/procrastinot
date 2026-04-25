@@ -4,7 +4,6 @@ import { cookies } from 'next/headers';
 import { requireProfile } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import {
-  MAX_BET_UNITS,
   MIN_BET_UNITS,
   MULTIPLIERS,
   isPlinkoRows,
@@ -35,8 +34,8 @@ export async function POST(request: NextRequest) {
   if (ballValueUnits === null) {
     return NextResponse.json({ error: 'Invalid ballValue' }, { status: 400 });
   }
-  if (ballValueUnits < BigInt(MIN_BET_UNITS) || ballValueUnits > BigInt(MAX_BET_UNITS)) {
-    return NextResponse.json({ error: 'ballValue out of range (0.10-10.00 USDC)' }, { status: 400 });
+  if (ballValueUnits < BigInt(MIN_BET_UNITS)) {
+    return NextResponse.json({ error: 'ballValue must be at least 0.10 USDC' }, { status: 400 });
   }
 
   const clientSeed = String(body.clientSeed ?? '').slice(0, 128) || 'default';

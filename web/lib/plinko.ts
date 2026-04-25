@@ -1,12 +1,22 @@
-// EV ≈ 0.70 per unit wagered (30% house edge). Jackpots capped at 50x
-// so outcomes feel lively without an outlier payout dominating the EV.
-// Verified with binomial weights: Σ C(n,k)/2^n × multiplier(k) ≈ 0.70
+// EV is determined by the live Matter.js physics distribution × this table,
+// NOT by a binomial assumption. The runtime distribution is empirically
+// measured via scripts/plinko-calibrate.ts; physics params in
+// plinko-physics.ts are tuned so EV < 1 at every row count.
+//
+// 10k-sample empirical EV (see scripts/plinko-calibrate.ts validate):
+//   8-row:  EV = 0.458   (house edge 54.2%)
+//   12-row: EV = 0.431   (house edge 56.9%)
+//   16-row: EV = 0.909   (house edge  9.1%)
+//
+// 8 and 12 collapse to a 3–5 slot center cluster under current physics
+// (jackpots unreachable). 16 produces a healthy spread; the 50x edge slot
+// is effectively unreachable, 20x lands ~0.04% of drops.
 export const MULTIPLIERS = {
-  // 9 slots. EV = 180.2/256 = 0.704
+  // 9 slots
   8: [9.0, 2.0, 0.9, 0.4, 0.5, 0.4, 0.9, 2.0, 9.0],
-  // 13 slots. EV = 2872.2/4096 = 0.701
+  // 13 slots
   12: [50, 10, 2.5, 1.0, 0.7, 0.5, 0.3, 0.5, 0.7, 1.0, 2.5, 10, 50],
-  // 17 slots. EV = 46082.3/65536 = 0.703
+  // 17 slots
   16: [50, 20, 7, 3.5, 1.8, 1.1, 0.7, 0.4, 0.25, 0.4, 0.7, 1.1, 1.8, 3.5, 7, 20, 50],
 } as const;
 
@@ -14,9 +24,7 @@ export type PlinkoRows = keyof typeof MULTIPLIERS;
 
 export const PLINKO_ROWS = [8, 12, 16] as const;
 export const MIN_BET_USDC = 0.1;
-export const MAX_BET_USDC = 10;
 export const MIN_BET_UNITS = 100_000;
-export const MAX_BET_UNITS = 10_000_000;
 export const USDC_UNITS = 1_000_000;
 
 export function isPlinkoRows(value: number): value is PlinkoRows {

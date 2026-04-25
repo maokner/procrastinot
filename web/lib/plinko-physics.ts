@@ -25,12 +25,14 @@ export const CAT_PEG = 0x0001;
 export const CAT_WALL = 0x0002;
 export const CAT_BALL = 0x0004;
 
-// Pylinko-faithful per-ball physics for the production board / pure-mode
-// demo balls. Bouncier than the legacy guided ball.
+// Tuned via scripts/plinko-calibrate.ts so the empirical Matter.js
+// distribution × MULTIPLIERS yields EV < 1 at all three row counts.
+// See the comment block at the top of plinko.ts for the 10k-sample
+// probabilities measured against this config.
 export const PURE_BALL_OPTIONS = {
-  restitution: 0.65,
+  restitution: 0.2,
   friction: 0.5,
-  frictionAir: 0.004,
+  frictionAir: 0.03,
   density: 0.003,
 } as const;
 
