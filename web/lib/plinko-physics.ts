@@ -1,79 +1,117 @@
-// Shared physics + geometry constants used by the live client board AND
-// the server-side simulation that pre-computes a ball's trajectory. Keeping
-// one source of truth here is what guarantees the recorded path lines up
-// with the client's pegs / buckets / ball radius.
+// Geometry + animation tunables shared by the renderer (PlinkoBoard) and
+// any debug script. The slot outcome is decided by the math engine in
+// lib/plinko.ts — these constants only affect the visual ball animation.
 
 import type { PlinkoRows } from './plinko';
 
-// Board dimensions (canvas pixels)
-export const BOARD_W = 640;
-export const BOARD_H = 520;
-export const CENTER_X = BOARD_W / 2;
-export const TOP_Y = 56;
-export const SLOT_Y = 474;
-export const SLOT_H = 34;
-export const PEG_R = 5;
-export const BALL_R = 9;
-
 // Engine
-export const GRAVITY_Y = 0.55;
 export const FIXED_DT_MS = 1000 / 60;
-export const MAX_SIM_STEPS = 600; // 10 seconds @ 60fps — safety cap
+export const MAX_SIM_STEPS = 800; // safety cap — only used by debug scripts
 
-// Collision categories so balls never collide with each other.
+// Animation tunables (used by the live PlinkoBoard renderer)
+export const GRAVITY_Y = 0.85;
+export const PEG_RESTITUTION = 0.5;
+export const BALL_RESTITUTION = 0.35;
+export const BALL_FRICTION_AIR = 0.012;
+export const BALL_DENSITY = 0.003;
+
+// Guidance constants for path-driven balls.
+export const GUIDE_MIN_SPEED = 3.4;
+export const TARGET_ATTRACTION = 0.0009;
+
+// Cleanup thresholds
+export const STUCK_MIN_SPEED_SQ = 0.5 * 0.5;
+export const STUCK_TIMEOUT_MS = 1500;
+export const MAX_BALL_LIFETIME_MS = 8000;
+
+// Collision categories — keeps balls from piling up on each other.
 export const CAT_PEG = 0x0001;
 export const CAT_WALL = 0x0002;
 export const CAT_BALL = 0x0004;
 
-// Tuned via scripts/plinko-calibrate.ts so the empirical Matter.js
-// distribution × MULTIPLIERS yields EV < 1 at all three row counts.
-// See the comment block at the top of plinko.ts for the 10k-sample
-// probabilities measured against this config.
-export const PURE_BALL_OPTIONS = {
-  restitution: 0.2,
-  friction: 0.5,
-  frictionAir: 0.03,
-  density: 0.003,
-} as const;
+export type Geometry = {
+  boardW: number;
+  boardH: number;
+  centerX: number;
+  topY: number;
+  pegSpan: number; // total horizontal span of the bottom row of pegs
+  rowGap: number; // vertical pixels between adjacent peg rows
+  gap: number; // horizontal pixels between adjacent pegs in the same row
+  pegR: number;
+  ballR: number;
+  slotY: number; // y at which buckets start (top of bucket box)
+  slotH: number; // bucket height
+};
 
-export const PEG_OPTIONS = {
-  isStatic: true,
-  restitution: 0.45,
-  friction: 0.05,
-  label: 'peg',
-} as const;
+// Per-row geometry. 16-row gets a wider board with slightly smaller pegs/balls
+// so the cone has room to breathe and balls visibly drop into buckets without
+// being squeezed against pegs.
+export function getBoardGeometry(rows: PlinkoRows): Geometry {
+  const boardW = 720;
+  const boardH = 760;
+  const centerX = boardW / 2;
+  const topY = 50;
+  const slotY = 700;
+  const slotH = 44;
+  const pegSpan = 600;
+  const gap = pegSpan / rows;
+  // 30 px breathing room between the last peg row and the bucket lip.
+  const rowGap = (slotY - topY - 30) / rows;
+  const pegR = rows === 16 ? 4 : rows === 12 ? 5 : 6;
+  const ballR = rows === 16 ? 7 : rows === 12 ? 8 : 9;
+  return {
+    boardW,
+    boardH,
+    centerX,
+    topY,
+    pegSpan,
+    rowGap,
+    gap,
+    pegR,
+    ballR,
+    slotY,
+    slotH,
+  };
+}
 
-export const WALL_OPTIONS = {
-  isStatic: true,
-  restitution: 0.2,
-  friction: 0.1,
-  label: 'wall',
-} as const;
-
-export function pegGeometry(rows: PlinkoRows) {
-  const gap = 560 / rows;
-  const rowGap = (SLOT_Y - TOP_Y - 30) / rows;
+/** All peg positions for a given board. Pyramid: row r has r+1 pegs. */
+export function pegLayout(
+  rows: PlinkoRows,
+  geo: Geometry = getBoardGeometry(rows),
+): { x: number; y: number }[] {
   const pegs: { x: number; y: number }[] = [];
   for (let r = 1; r <= rows; r++) {
     for (let c = 0; c <= r; c++) {
       pegs.push({
-        x: CENTER_X + (2 * c - r) * (gap / 2),
-        y: TOP_Y + r * rowGap,
+        x: geo.centerX + (2 * c - r) * (geo.gap / 2),
+        y: geo.topY + r * geo.rowGap,
       });
     }
   }
-  return { gap, rowGap, pegs };
+  return pegs;
 }
 
-export function slotForX(x: number, rows: PlinkoRows): number {
-  const { gap } = pegGeometry(rows);
-  const leftEdge = CENTER_X - (rows * gap) / 2;
-  const idx = Math.round((x - leftEdge) / gap);
+/** X-coordinate of bucket k (k in [0..rows]). Buckets line up with the
+ * bottom row of pegs so the ball's final x maps cleanly to bucket index. */
+export function bucketCenterX(
+  slot: number,
+  rows: PlinkoRows,
+  geo: Geometry = getBoardGeometry(rows),
+): number {
+  return geo.centerX + (2 * slot - rows) * (geo.gap / 2);
+}
+
+export function slotForX(
+  x: number,
+  rows: PlinkoRows,
+  geo: Geometry = getBoardGeometry(rows),
+): number {
+  const leftEdge = geo.centerX - (rows * geo.gap) / 2;
+  const idx = Math.round((x - leftEdge) / geo.gap);
   return Math.max(0, Math.min(rows, idx));
 }
 
-// Mulberry32 — small fast PRNG. Same implementation server- and client-side
-// so the simulation is deterministic given a seed.
+// Mulberry32 — small fast PRNG. Useful for seeded debug scripts.
 export function mulberry32(seed: number): () => number {
   let s = seed >>> 0;
   return function () {
@@ -85,7 +123,6 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
-// Derive a 32-bit seed from the first four bytes of an HMAC digest.
 export function seedFromBytes(bytes: Uint8Array): number {
   return (
     ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0

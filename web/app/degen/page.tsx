@@ -5,9 +5,13 @@ import Link from 'next/link';
 import { supabaseBrowser } from '@/lib/supabase';
 import type { DegenBalance, PlinkoDrop } from '@/lib/db-types';
 import {
+  DEFAULT_RISK,
   MIN_BET_USDC,
   PLINKO_ROWS,
+  RISK_LEVELS,
   type PlinkoRows,
+  type RiskLevel,
+  expectedValue,
   unitsToUsdc,
   multiplierColor,
   parseUsdcToUnits,
@@ -21,17 +25,17 @@ const SPAWN_DELAY_MS = 700;
 
 type DropResult = {
   dropId: string;
+  risk: RiskLevel;
   path: boolean[];
   slot: number;
   multiplier: number;
+  multipliers: number[];
   payout: string;
   balanceBefore: string;
   balanceAfter: string;
   serverSeed: string;
   serverSeedHash: string;
   clientSeed: string;
-  trajectory: number[][];
-  pegHits: { frame: number; x: number; y: number }[];
 };
 
 type Flash = { key: number; result: 'win' | 'miss'; multiplier: number };
@@ -45,6 +49,7 @@ export default function DegenPage() {
   const [balance, setBalance] = useState<DegenBalance | null>(null);
   const [drops, setDrops] = useState<PlinkoDrop[]>([]);
   const [rows, setRows] = useState<PlinkoRows>(12);
+  const [risk, setRisk] = useState<RiskLevel>(DEFAULT_RISK);
   const [ballValue, setBallValue] = useState('0.10');
   const [clientSeed, setClientSeed] = useState('procrastinot');
   const [ballsInFlight, setBallsInFlight] = useState(0);
@@ -212,7 +217,7 @@ export default function DegenPage() {
       const res = await fetch('/api/plinko/drop', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows, ballValue, clientSeed }),
+        body: JSON.stringify({ rows, ballValue, clientSeed, risk }),
       });
       const data = (await res.json()) as DropResult & { error?: string };
       if (!res.ok) throw new Error(data.error ?? 'Drop failed');
@@ -242,12 +247,7 @@ export default function DegenPage() {
         }
       };
 
-      const added = boardRef.current?.addPlaybackBall(
-        data.trajectory,
-        data.pegHits,
-        data.slot,
-        creditPayout,
-      );
+      const added = boardRef.current?.addBall(data.path, creditPayout);
 
       if (!added) {
         // Board was at capacity — credit payout immediately since no ball
@@ -365,6 +365,7 @@ export default function DegenPage() {
                 <PlinkoBoard
                   ref={boardRef}
                   rows={rows}
+                  riskLevel={risk}
                   activeSlot={activeSlot}
                   onReady={() => setBoardReady(true)}
                 />
@@ -401,6 +402,28 @@ export default function DegenPage() {
                       </button>
                     ))}
                   </div>
+                </div>
+
+                <div>
+                  <p className="pn-kicker mb-2">Risk</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {RISK_LEVELS.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        className="pn-degen-pill capitalize"
+                        data-active={risk === option}
+                        disabled={ballsInFlight > 0}
+                        onClick={() => setRisk(option)}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-2 font-mono text-[10px] text-[var(--degen-ink-dim)]">
+                    EV {(expectedValue(rows, risk) * 100).toFixed(1)}% per drop · house edge{' '}
+                    {((1 - expectedValue(rows, risk)) * 100).toFixed(1)}%
+                  </p>
                 </div>
 
                 <label className="flex flex-col gap-2">

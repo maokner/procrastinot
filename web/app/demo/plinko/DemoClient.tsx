@@ -6,8 +6,9 @@ import PlinkoBoard, {
   type PlinkoBoardHandle,
 } from '@/components/plinko/PlinkoBoard';
 import {
-  MULTIPLIERS,
   PLINKO_ROWS,
+  formatMultiplier,
+  getMultipliers,
   multiplierColor,
   type PlinkoRows,
 } from '@/lib/plinko';
@@ -25,13 +26,10 @@ type LandedDrop = {
   rows: PlinkoRows;
 };
 
-type Mode = 'pure' | 'guided';
-
 export default function DemoClient() {
   const boardRef = useRef<PlinkoBoardHandle>(null);
   const seqRef = useRef(0);
   const [rows, setRows] = useState<PlinkoRows>(12);
-  const [mode, setMode] = useState<Mode>('pure');
   const [boardReady, setBoardReady] = useState(false);
   const [inFlight, setInFlight] = useState(0);
   const [lastSlot, setLastSlot] = useState<number | null>(null);
@@ -50,17 +48,14 @@ export default function DemoClient() {
             id: ++seqRef.current,
             slot,
             rows,
-            multiplier: MULTIPLIERS[rows][slot],
+            multiplier: getMultipliers(rows)[slot],
           },
           ...prev,
         ].slice(0, 20),
       );
     };
 
-    const added =
-      mode === 'pure'
-        ? boardRef.current?.addPureBall(onLand)
-        : boardRef.current?.addBall(fakePath(rows), onLand);
+    const added = boardRef.current?.addBall(fakePath(rows), onLand);
     if (added) setInFlight((n) => n + 1);
   }
 
@@ -115,7 +110,7 @@ export default function DemoClient() {
       if (spaceTimerRef.current) clearInterval(spaceTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boardReady, mode, rows, inFlight]);
+  }, [boardReady, rows, inFlight]);
 
   const totalPaid = history.reduce((s, h) => s + h.multiplier, 0);
   const avg = history.length ? totalPaid / history.length : 0;
@@ -130,10 +125,9 @@ export default function DemoClient() {
               Plinko Playground
             </h1>
             <p className="mt-1 font-mono text-xs text-[var(--degen-ink-dim)]">
-              <span className="text-[var(--degen-accent)]">Pure</span> physics —
-              no server bias, no guidance, ball lands wherever it bounces.
-              Toggle <span className="text-[var(--degen-accent)]">Guided</span>{' '}
-              to feel the difference. Dev-only route (404 in production).
+              Path generated client-side via Math.random(); ball animates
+              along that path with guided physics. Live product picks the
+              path server-side via HMAC-SHA256. Dev-only route (404 in prod).
             </p>
           </div>
           <div className="text-right font-mono text-xs text-[var(--degen-ink-dim)]">
@@ -156,24 +150,6 @@ export default function DemoClient() {
           </section>
 
           <aside className="flex flex-col gap-5">
-            <div>
-              <p className="pn-kicker mb-2">Mode</p>
-              <div className="grid grid-cols-2 gap-2">
-                {(['pure', 'guided'] as const).map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    className="pn-degen-pill"
-                    data-active={mode === m}
-                    disabled={inFlight > 0}
-                    onClick={() => setMode(m)}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <div>
               <p className="pn-kicker mb-2">Rows</p>
               <div className="grid grid-cols-3 gap-2">
@@ -233,7 +209,7 @@ export default function DemoClient() {
                         slot {h.slot}
                       </span>
                       <span style={{ color: multiplierColor(h.multiplier) }}>
-                        {h.multiplier}x
+                        {formatMultiplier(h.multiplier)}
                       </span>
                     </li>
                   ))}

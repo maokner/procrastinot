@@ -4,69 +4,59 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from 'react';
 import Matter from 'matter-js';
 import {
-  MULTIPLIERS,
-  type PlinkoRows,
+  DEFAULT_RISK,
   binProbability,
+  formatMultiplier,
+  getMultipliers,
   multiplierColor,
+  type PlinkoRows,
+  type RiskLevel,
 } from '@/lib/plinko';
+import {
+  BALL_DENSITY,
+  BALL_FRICTION_AIR,
+  BALL_RESTITUTION,
+  CAT_BALL,
+  CAT_PEG,
+  CAT_WALL,
+  GRAVITY_Y,
+  GUIDE_MIN_SPEED,
+  MAX_BALL_LIFETIME_MS,
+  PEG_RESTITUTION,
+  STUCK_MIN_SPEED_SQ,
+  STUCK_TIMEOUT_MS,
+  TARGET_ATTRACTION,
+  bucketCenterX,
+  getBoardGeometry,
+  pegLayout,
+} from '@/lib/plinko-physics';
 import {
   isMuted,
   playBucketLand,
   playPegHit,
   toggleMuted,
 } from '@/lib/plinko-sounds';
-import { FIXED_DT_MS } from '@/lib/plinko-physics';
 
-// ─── Board dimensions ───────────────────────────────────────────────────────
-const BOARD_W = 640;
-const BOARD_H = 520;
-const CENTER_X = BOARD_W / 2;
-const TOP_Y = 56;
-const SLOT_Y = 474;
-const SLOT_H = 34;
-const PEG_R = 5;
-const BALL_R = 9;
-
-export const MAX_PLINKO_BALLS = 20;
+export const MAX_PLINKO_BALLS = 24;
 const MAX_PAYOUT_CARDS = 5;
 
-// ─── Physics ────────────────────────────────────────────────────────────────
-const GRAVITY_Y = 0.55;
-const PEG_RESTITUTION = 0.45;
-const BALL_RESTITUTION = 0.30;
-const BALL_FRICTION_AIR = 0.016;
-const BALL_DENSITY = 0.003;
-const GUIDE_MIN_SPEED = 2.8;
-const TARGET_ATTRACTION = 0.00045;
-
-// Cleanup thresholds
-const STUCK_MIN_SPEED_SQ = 0.5 * 0.5;   // px/tick, squared
-const STUCK_TIMEOUT_MS = 1500;
-const MAX_BALL_LIFETIME_MS = 6000;
-
-// Collision categories — keeps balls from piling up on each other.
-const CAT_PEG = 0x0001;
-const CAT_WALL = 0x0002;
-const CAT_BALL = 0x0004;
-
-// Visual tuning
 const RING_DURATION_MS = 250;
-const RING_R_FROM = PEG_R;
-const RING_R_TO = 18;
 const BUCKET_BOUNCE_MS = 280;
 const BUCKET_BOUNCE_PX = 4;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-// path === null  → pure-physics ball (no guidance, slot derived from landing x)
-// path !== null  → guided ball, locked to path.filter(Boolean).length
+// Path-driven ball: the math engine has already chosen the bucket. `path` is
+// the bit array from the server; `targetSlot = path.filter(Boolean).length`.
+// The renderer animates a guided ball that lands in this exact bucket.
 type BallRecord = {
   body: Matter.Body;
-  path: boolean[] | null;
+  path: boolean[];
   targetSlot: number;
   lastGuidedRow: number;
   landed: boolean;
@@ -78,42 +68,9 @@ type BallRecord = {
 type Ring = { x: number; y: number; t0: number };
 type BucketAnim = { slot: number; t0: number };
 
-type PlaybackBall = {
-  id: number;
-  trajectory: number[][]; // [[x, y], ...] one per fixed step
-  pegHits: { frame: number; x: number; y: number }[];
-  nextPegHitIdx: number;
-  startTs: number;
-  targetSlot: number; // server-authoritative
-  landed: boolean;
-  onLand: (slot: number) => void;
-};
-
 export type PlinkoBoardHandle = {
   addBall: (path: boolean[], onLand: (slot: number) => void) => boolean;
-  addPureBall: (onLand: (slot: number) => void) => boolean;
-  addPlaybackBall: (
-    trajectory: number[][],
-    pegHits: { frame: number; x: number; y: number }[],
-    targetSlot: number,
-    onLand: (slot: number) => void,
-  ) => boolean;
 };
-
-function pegGeometry(rows: PlinkoRows) {
-  const gap = 560 / rows;
-  const rowGap = (SLOT_Y - TOP_Y - 30) / rows;
-  const pegs: { x: number; y: number }[] = [];
-  for (let r = 1; r <= rows; r++) {
-    for (let c = 0; c <= r; c++) {
-      pegs.push({
-        x: CENTER_X + (2 * c - r) * (gap / 2),
-        y: TOP_Y + r * rowGap,
-      });
-    }
-  }
-  return { gap, rowGap, pegs };
-}
 
 type PayoutCard = {
   id: number;
@@ -126,26 +83,34 @@ const PlinkoBoard = forwardRef<
   PlinkoBoardHandle,
   {
     rows: PlinkoRows;
+    riskLevel?: RiskLevel;
     activeSlot: number | null;
     onReady?: () => void;
   }
->(function PlinkoBoard({ rows, activeSlot, onReady }, ref) {
+>(function PlinkoBoard(
+  { rows, riskLevel = DEFAULT_RISK, activeSlot, onReady },
+  ref,
+) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Matter.Engine | null>(null);
   const pegBodiesRef = useRef<Matter.Body[]>([]);
   const ballsRef = useRef<BallRecord[]>([]);
-  const playbackBallsRef = useRef<PlaybackBall[]>([]);
   const ringsRef = useRef<Ring[]>([]);
   const bucketAnimsRef = useRef<BucketAnim[]>([]);
   const rafRef = useRef<number>(0);
   const activeSlotRef = useRef(activeSlot);
   const hoveredSlotRef = useRef<number | null>(null);
   const cardSeqRef = useRef(0);
-  const ballSeqRef = useRef(0);
 
   const [hoveredSlot, setHoveredSlot] = useState<number | null>(null);
   const [payoutCards, setPayoutCards] = useState<PayoutCard[]>([]);
   const [muted, setMutedState] = useState(false);
+
+  const geo = useMemo(() => getBoardGeometry(rows), [rows]);
+  const multipliers = useMemo(
+    () => getMultipliers(rows, riskLevel),
+    [rows, riskLevel],
+  );
 
   useEffect(() => {
     setMutedState(isMuted());
@@ -176,17 +141,15 @@ const PlinkoBoard = forwardRef<
       engineRef.current = null;
     }
     ballsRef.current = [];
-    playbackBallsRef.current = [];
     ringsRef.current = [];
     bucketAnimsRef.current = [];
 
     const engine = Matter.Engine.create({ gravity: { x: 0, y: GRAVITY_Y } });
     engineRef.current = engine;
 
-    const { gap, rowGap, pegs } = pegGeometry(rows);
-
+    const pegs = pegLayout(rows, geo);
     const pegBodies = pegs.map(({ x, y }) =>
-      Matter.Bodies.circle(x, y, PEG_R, {
+      Matter.Bodies.circle(x, y, geo.pegR, {
         isStatic: true,
         restitution: PEG_RESTITUTION,
         friction: 0.05,
@@ -203,15 +166,54 @@ const PlinkoBoard = forwardRef<
       label: 'wall',
       collisionFilter: { category: CAT_WALL, mask: CAT_BALL },
     };
-    const walls = [
-      Matter.Bodies.rectangle(22, BOARD_H / 2, 44, BOARD_H * 2, wallOpts),
-      Matter.Bodies.rectangle(BOARD_W - 22, BOARD_H / 2, 44, BOARD_H * 2, wallOpts),
-      Matter.Bodies.rectangle(BOARD_W / 2, BOARD_H + 22, BOARD_W, 44, wallOpts),
+    const wallInset = 18;
+    const walls: Matter.Body[] = [
+      Matter.Bodies.rectangle(
+        wallInset,
+        geo.boardH / 2,
+        36,
+        geo.boardH * 2,
+        wallOpts,
+      ),
+      Matter.Bodies.rectangle(
+        geo.boardW - wallInset,
+        geo.boardH / 2,
+        36,
+        geo.boardH * 2,
+        wallOpts,
+      ),
+      // Floor sits below the bucket so balls visibly settle in their slot.
+      Matter.Bodies.rectangle(
+        geo.boardW / 2,
+        geo.slotY + geo.slotH + 22,
+        geo.boardW,
+        44,
+        wallOpts,
+      ),
     ];
+
+    // Bucket dividers — one between every adjacent pair of buckets, plus the
+    // outer two edges. These confine the ball to the predetermined slot once
+    // it has dropped past the last peg row.
+    const dividerTop = geo.slotY - 4;
+    const dividerBottom = geo.slotY + geo.slotH;
+    for (let k = 0; k <= rows + 1; k++) {
+      const xDiv =
+        geo.centerX - (rows * geo.gap) / 2 + (k - 0.5) * geo.gap;
+      walls.push(
+        Matter.Bodies.rectangle(
+          xDiv,
+          (dividerTop + dividerBottom) / 2,
+          3,
+          dividerBottom - dividerTop,
+          wallOpts,
+        ),
+      );
+    }
 
     Matter.World.add(engine.world, [...pegBodies, ...walls]);
 
-    // Spawn expanding rings + click sound where balls hit pegs.
+    // Peg-hit ring + click sound.
     Matter.Events.on(engine, 'collisionStart', (event) => {
       const now = performance.now();
       for (const pair of event.pairs) {
@@ -222,14 +224,16 @@ const PlinkoBoard = forwardRef<
           bodyA.label === 'ball' ? bodyA : bodyB.label === 'ball' ? bodyB : null;
         if (peg && ball) {
           ringsRef.current.push({ x: peg.position.x, y: peg.position.y, t0: now });
-          if (ringsRef.current.length > 24) {
-            ringsRef.current.splice(0, ringsRef.current.length - 24);
+          if (ringsRef.current.length > 32) {
+            ringsRef.current.splice(0, ringsRef.current.length - 32);
           }
           playPegHit();
         }
       }
     });
 
+    // Per-ball guidance: nudge velocity by row, attract toward target near
+    // the bottom, then land when the ball reaches bucket bottom.
     Matter.Events.on(engine, 'beforeUpdate', () => {
       const now = performance.now();
 
@@ -239,33 +243,27 @@ const PlinkoBoard = forwardRef<
         const vx = ball.body.velocity.x;
         const vy = ball.body.velocity.y;
         const speedSq = vx * vx + vy * vy;
+        if (speedSq > STUCK_MIN_SPEED_SQ) ball.lastMotionTs = now;
 
-        if (speedSq > STUCK_MIN_SPEED_SQ) {
-          ball.lastMotionTs = now;
-        }
-
-        // Landing — fires the moment the ball intersects the slot row.
-        if (y >= SLOT_Y - BALL_R) {
-          landBall(ball, slotForBall(ball, x), now);
+        // Land when ball is well inside the bucket — visually it falls all
+        // the way down rather than vanishing above the bucket lip.
+        if (y >= geo.slotY + geo.slotH - geo.ballR - 2) {
+          landBall(ball, ball.targetSlot, now);
           continue;
         }
 
-        // Pure-physics balls run free: no timeouts, no guidance, no attractor.
-        // They land only when they actually reach the slot line above.
-        if (ball.path === null) continue;
-
-        // Stuck-ball cleanup — guided balls only. Without this safety the
-        // attractor can occasionally pin a ball against a peg corner.
+        // Stuck-ball cleanup. The attractor can occasionally pin a ball
+        // against a peg corner; this catches that case.
         if (
           now - ball.lastMotionTs > STUCK_TIMEOUT_MS ||
           now - ball.spawnTs > MAX_BALL_LIFETIME_MS
         ) {
-          landBall(ball, slotForBall(ball, x), now);
+          landBall(ball, ball.targetSlot, now);
           continue;
         }
 
-        // Per-row velocity nudge toward the correct side
-        const gapIndex = Math.floor((y - TOP_Y) / rowGap);
+        // Per-row velocity nudge — picks the side dictated by the bit array.
+        const gapIndex = Math.floor((y - geo.topY) / geo.rowGap);
         if (
           gapIndex >= 0 &&
           gapIndex < ball.path.length &&
@@ -277,9 +275,9 @@ const PlinkoBoard = forwardRef<
           Matter.Body.setVelocity(ball.body, { x: newVx, y: vy });
         }
 
-        // Soft attractor so the physical landing aligns with the target slot.
-        if (y > SLOT_Y - rowGap * 2.5) {
-          const targetX = CENTER_X + (2 * ball.targetSlot - rows) * (gap / 2);
+        // Soft attractor so the visual landing aligns with the target slot.
+        if (y > geo.slotY - geo.rowGap * 3) {
+          const targetX = bucketCenterX(ball.targetSlot, rows, geo);
           Matter.Body.applyForce(ball.body, ball.body.position, {
             x: (targetX - x) * TARGET_ATTRACTION * ball.body.mass,
             y: 0,
@@ -287,7 +285,7 @@ const PlinkoBoard = forwardRef<
         }
       }
 
-      // Trim ring animations that have elapsed
+      // Trim ring + bucket animations.
       const ringCut = now - RING_DURATION_MS;
       if (ringsRef.current.length && ringsRef.current[0].t0 < ringCut) {
         ringsRef.current = ringsRef.current.filter((r) => r.t0 >= ringCut);
@@ -302,10 +300,8 @@ const PlinkoBoard = forwardRef<
         );
       }
 
-      // GC balls that dropped off the board entirely (shouldn't happen with
-      // bottom wall, but cheap safety).
       ballsRef.current = ballsRef.current.filter((b) => {
-        if (b.body.position.y > BOARD_H + 60) {
+        if (b.body.position.y > geo.boardH + 80) {
           Matter.World.remove(engine.world, b.body);
           return false;
         }
@@ -313,18 +309,9 @@ const PlinkoBoard = forwardRef<
       });
     });
 
-    function slotForBall(ball: BallRecord, x: number): number {
-      // Guided ball: server already committed to a slot.
-      if (ball.path !== null) return ball.targetSlot;
-      // Pure ball: round to the nearest bin under the ball.
-      const leftEdge = CENTER_X - (rows * gap) / 2;
-      const idx = Math.round((x - leftEdge) / gap);
-      return Math.max(0, Math.min(rows, idx));
-    }
-
     function commitLanding(slot: number, now: number, onLand: (s: number) => void) {
       bucketAnimsRef.current.push({ slot, t0: now });
-      const mult = MULTIPLIERS[rows][slot];
+      const mult = multipliers[slot];
       setPayoutCards((prev) => {
         const next: PayoutCard = {
           id: ++cardSeqRef.current,
@@ -344,52 +331,8 @@ const PlinkoBoard = forwardRef<
       commitLanding(slot, now, ball.onLand);
     }
 
-    function advancePlaybackBalls(ts: number) {
-      const remaining: PlaybackBall[] = [];
-      for (const pb of playbackBallsRef.current) {
-        if (pb.landed) continue;
-        const elapsed = ts - pb.startTs;
-        const frameIdx = Math.floor(elapsed / FIXED_DT_MS);
-
-        // Fire any peg-hit events whose recorded frame we've now passed.
-        while (
-          pb.nextPegHitIdx < pb.pegHits.length &&
-          pb.pegHits[pb.nextPegHitIdx].frame <= frameIdx
-        ) {
-          const hit = pb.pegHits[pb.nextPegHitIdx];
-          ringsRef.current.push({ x: hit.x, y: hit.y, t0: ts });
-          if (ringsRef.current.length > 32) {
-            ringsRef.current.splice(0, ringsRef.current.length - 32);
-          }
-          playPegHit();
-          pb.nextPegHitIdx++;
-        }
-
-        // End of trajectory → land.
-        if (frameIdx >= pb.trajectory.length - 1) {
-          pb.landed = true;
-          commitLanding(pb.targetSlot, ts, pb.onLand);
-          continue;
-        }
-        remaining.push(pb);
-      }
-      playbackBallsRef.current = remaining;
-    }
-
-    function playbackBallPosition(pb: PlaybackBall, ts: number) {
-      const elapsed = ts - pb.startTs;
-      const f = elapsed / FIXED_DT_MS;
-      const i = Math.min(pb.trajectory.length - 1, Math.max(0, Math.floor(f)));
-      const j = Math.min(pb.trajectory.length - 1, i + 1);
-      const t = f - i;
-      const a = pb.trajectory[i];
-      const b = pb.trajectory[j];
-      return { x: a[0] + (b[0] - a[0]) * t, y: a[1] + (b[1] - a[1]) * t };
-    }
-
     // ─── Render loop ────────────────────────────────────────────────────────
-    const multipliers = MULTIPLIERS[rows];
-    const slotWidth = gap;
+    const slotWidth = geo.gap;
     let prevTs = 0;
 
     function draw(ts: number) {
@@ -397,107 +340,90 @@ const PlinkoBoard = forwardRef<
       const dt = prevTs ? Math.min(ts - prevTs, 50) : 1000 / 60;
       prevTs = ts;
       Matter.Engine.update(engine, dt);
-      advancePlaybackBalls(ts);
 
       // Background
       ctx.fillStyle = '#0e1b2a';
-      ctx.fillRect(0, 0, BOARD_W, BOARD_H);
+      ctx.fillRect(0, 0, geo.boardW, geo.boardH);
 
-      // Subtle vertical rails for depth
+      // Faint vertical rails for depth
       ctx.strokeStyle = 'rgba(34, 55, 79, 0.55)';
       ctx.lineWidth = 1;
       for (let i = 1; i < 8; i++) {
-        const gx = (BOARD_W / 8) * i;
+        const gx = (geo.boardW / 8) * i;
         ctx.beginPath();
         ctx.moveTo(gx, 36);
-        ctx.lineTo(gx, SLOT_Y - 8);
+        ctx.lineTo(gx, geo.slotY - 8);
         ctx.stroke();
       }
-
-      // Top + bottom guide strokes
-      ctx.strokeStyle = 'rgba(142, 163, 187, 0.55)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(36, 42);
-      ctx.lineTo(604, 42);
-      ctx.moveTo(36, 468);
-      ctx.lineTo(604, 468);
-      ctx.stroke();
 
       // Slot bins
       const activeSl = activeSlotRef.current;
       const hovSl = hoveredSlotRef.current;
       const bucketAnims = bucketAnimsRef.current;
       for (let i = 0; i <= rows; i++) {
-        const sx = CENTER_X + (2 * i - rows) * (slotWidth / 2);
+        const sx = bucketCenterX(i, rows, geo);
         const mult = multipliers[i];
         const color = multiplierColor(mult);
 
-        // Bucket bounce offset: quadratic pop at impact, settles back.
         let yOffset = 0;
         const anim = bucketAnims.find((b) => b.slot === i);
         if (anim) {
           const u = Math.min(1, (ts - anim.t0) / BUCKET_BOUNCE_MS);
-          // 0 → -1 → 0 smooth via sin
           yOffset = -BUCKET_BOUNCE_PX * Math.sin(Math.PI * u);
         }
 
         const isActive = activeSl === i;
         const isHov = hovSl === i;
 
-        // Bucket body
         ctx.beginPath();
         ctx.rect(
           sx - slotWidth / 2 + 2,
-          SLOT_Y + yOffset,
+          geo.slotY + yOffset,
           slotWidth - 4,
-          SLOT_H,
+          geo.slotH,
         );
         ctx.fillStyle = color;
         ctx.fill();
 
-        // Subtle sheen so color isn't too flat
         const sheen = ctx.createLinearGradient(
           0,
-          SLOT_Y + yOffset,
+          geo.slotY + yOffset,
           0,
-          SLOT_Y + yOffset + SLOT_H,
+          geo.slotY + yOffset + geo.slotH,
         );
         sheen.addColorStop(0, 'rgba(255,255,255,0.22)');
         sheen.addColorStop(1, 'rgba(0,0,0,0.15)');
         ctx.fillStyle = sheen;
         ctx.fill();
 
-        // Border + active/hover highlight
         ctx.strokeStyle = isActive
           ? '#ffffff'
           : isHov
-          ? 'rgba(255,255,255,0.55)'
-          : 'rgba(0,0,0,0.25)';
+            ? 'rgba(255,255,255,0.55)'
+            : 'rgba(0,0,0,0.25)';
         ctx.lineWidth = isActive ? 2 : 1;
         ctx.stroke();
 
-        // Label
         const fontSize = rows === 16 ? 9 : rows === 12 ? 11 : 12;
         ctx.fillStyle = '#1a1a1a';
         ctx.font = `700 ${fontSize}px 'JetBrains Mono', ui-monospace, monospace`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(`${mult}x`, sx, SLOT_Y + yOffset + SLOT_H / 2);
+        ctx.fillText(formatMultiplier(mult), sx, geo.slotY + yOffset + geo.slotH / 2);
       }
 
       // Pegs
       for (const peg of pegBodiesRef.current) {
         ctx.beginPath();
-        ctx.arc(peg.position.x, peg.position.y, PEG_R, 0, Math.PI * 2);
+        ctx.arc(peg.position.x, peg.position.y, geo.pegR, 0, Math.PI * 2);
         ctx.fillStyle = '#ffffff';
         ctx.fill();
       }
 
-      // Peg-hit expanding rings
+      // Peg-hit rings
       for (const ring of ringsRef.current) {
         const u = Math.min(1, (ts - ring.t0) / RING_DURATION_MS);
-        const r = RING_R_FROM + (RING_R_TO - RING_R_FROM) * u;
+        const r = geo.pegR + (18 - geo.pegR) * u;
         const alpha = 1 - u;
         ctx.beginPath();
         ctx.arc(ring.x, ring.y, r, 0, Math.PI * 2);
@@ -506,14 +432,9 @@ const PlinkoBoard = forwardRef<
         ctx.stroke();
       }
 
-      // Balls — physics-driven (guided/pure mode)
+      // Balls
       for (const ball of ballsRef.current) {
         const { x, y } = ball.body.position;
-        drawBall(x, y);
-      }
-      // Balls — trajectory playback (production /degen)
-      for (const pb of playbackBallsRef.current) {
-        const { x, y } = playbackBallPosition(pb, ts);
         drawBall(x, y);
       }
 
@@ -526,7 +447,7 @@ const PlinkoBoard = forwardRef<
       ctx.shadowBlur = 10;
       ctx.shadowColor = 'rgba(255, 48, 48, 0.55)';
       ctx.beginPath();
-      ctx.arc(x, y, BALL_R, 0, Math.PI * 2);
+      ctx.arc(x, y, geo.ballR, 0, Math.PI * 2);
       ctx.fillStyle = '#ff3030';
       ctx.fill();
       ctx.shadowBlur = 0;
@@ -547,14 +468,13 @@ const PlinkoBoard = forwardRef<
       Matter.Engine.clear(engine);
       engineRef.current = null;
       ballsRef.current = [];
-      playbackBallsRef.current = [];
       ringsRef.current = [];
       bucketAnimsRef.current = [];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows]);
+  }, [rows, geo]);
 
-  // ─── Expose addBall ───────────────────────────────────────────────────────
+  // ─── Expose addBall ────────────────────────────────────────────────────────
   useImperativeHandle(
     ref,
     () => ({
@@ -562,14 +482,15 @@ const PlinkoBoard = forwardRef<
         const engine = engineRef.current;
         if (!engine) return false;
         if (ballsRef.current.length >= MAX_PLINKO_BALLS) return false;
+        if (path.length !== rows) return false;
 
         const targetSlot = path.filter(Boolean).length;
         const jitter = (Math.random() - 0.5) * 8;
         const now = performance.now();
         const body = Matter.Bodies.circle(
-          CENTER_X + jitter,
-          TOP_Y - BALL_R * 2,
-          BALL_R,
+          geo.centerX + jitter,
+          geo.topY - geo.ballR * 2,
+          geo.ballR,
           {
             restitution: BALL_RESTITUTION,
             friction: 0.02,
@@ -580,7 +501,7 @@ const PlinkoBoard = forwardRef<
           },
         );
         const initDir = path[0] ? 1 : -1;
-        Matter.Body.setVelocity(body, { x: initDir * 0.8, y: 0.5 });
+        Matter.Body.setVelocity(body, { x: initDir * 1.0, y: 0.6 });
 
         Matter.World.add(engine.world, body);
         ballsRef.current.push({
@@ -595,72 +516,8 @@ const PlinkoBoard = forwardRef<
         });
         return true;
       },
-
-      addPlaybackBall(trajectory, pegHits, targetSlot, onLand) {
-        if (
-          ballsRef.current.length + playbackBallsRef.current.length >=
-          MAX_PLINKO_BALLS
-        )
-          return false;
-        if (!trajectory || trajectory.length < 2) return false;
-        playbackBallsRef.current.push({
-          id: ++ballSeqRef.current,
-          trajectory,
-          pegHits: pegHits ?? [],
-          nextPegHitIdx: 0,
-          startTs: performance.now(),
-          targetSlot,
-          landed: false,
-          onLand,
-        });
-        return true;
-      },
-
-      addPureBall(onLand) {
-        const engine = engineRef.current;
-        if (!engine) return false;
-        if (ballsRef.current.length >= MAX_PLINKO_BALLS) return false;
-
-        const jitter = (Math.random() - 0.5) * 12;
-        const now = performance.now();
-        // pylinko-faithful per-ball physics. Engine gravity / peg restitution
-        // are unchanged so guided balls (used by /degen) still behave the
-        // same. Bouncier ball + lower air drag = real bounces, no guidance.
-        const body = Matter.Bodies.circle(
-          CENTER_X + jitter,
-          TOP_Y - BALL_R * 2,
-          BALL_R,
-          {
-            restitution: 0.65,
-            friction: 0.5,
-            frictionAir: 0.004,
-            density: BALL_DENSITY,
-            label: 'ball',
-            collisionFilter: { category: CAT_BALL, mask: CAT_PEG | CAT_WALL },
-          },
-        );
-        // Sub-pixel horizontal jitter so successive drops don't trace the
-        // exact same line. No path-keyed nudge.
-        Matter.Body.setVelocity(body, {
-          x: (Math.random() - 0.5) * 0.6,
-          y: 0.4,
-        });
-
-        Matter.World.add(engine.world, body);
-        ballsRef.current.push({
-          body,
-          path: null,
-          targetSlot: -1,
-          lastGuidedRow: -1,
-          landed: false,
-          spawnTs: now,
-          lastMotionTs: now,
-          onLand,
-        });
-        return true;
-      },
     }),
-    [],
+    [rows, geo],
   );
 
   // ─── Hover detection ──────────────────────────────────────────────────────
@@ -668,13 +525,12 @@ const PlinkoBoard = forwardRef<
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) * (BOARD_W / rect.width);
-    const my = (e.clientY - rect.top) * (BOARD_H / rect.height);
+    const mx = (e.clientX - rect.left) * (geo.boardW / rect.width);
+    const my = (e.clientY - rect.top) * (geo.boardH / rect.height);
 
-    if (my >= SLOT_Y && my <= SLOT_Y + SLOT_H) {
-      const gap = 560 / rows;
-      const leftEdge = CENTER_X - (rows * gap) / 2;
-      const idx = Math.round((mx - leftEdge) / gap);
+    if (my >= geo.slotY && my <= geo.slotY + geo.slotH) {
+      const leftEdge = geo.centerX - (rows * geo.gap) / 2;
+      const idx = Math.round((mx - leftEdge) / geo.gap);
       if (idx >= 0 && idx <= rows) {
         setHoveredSlot(idx);
         return;
@@ -688,7 +544,7 @@ const PlinkoBoard = forwardRef<
       ? {
           slot: hoveredSlot,
           prob: binProbability(rows, hoveredSlot),
-          mult: MULTIPLIERS[rows][hoveredSlot],
+          mult: multipliers[hoveredSlot],
         }
       : null;
 
@@ -696,9 +552,10 @@ const PlinkoBoard = forwardRef<
     <div className="relative">
       <canvas
         ref={canvasRef}
-        width={BOARD_W}
-        height={BOARD_H}
-        className="aspect-[640/520] w-full"
+        width={geo.boardW}
+        height={geo.boardH}
+        style={{ aspectRatio: `${geo.boardW} / ${geo.boardH}` }}
+        className="w-full"
         onMouseMove={handleMouseMove}
         onMouseLeave={() => setHoveredSlot(null)}
       />
@@ -712,7 +569,6 @@ const PlinkoBoard = forwardRef<
         {muted ? '🔇' : '🔊'}
       </button>
 
-      {/* Payout card stack — newest on top. Pure DOM so it survives rows resets. */}
       <ul
         aria-hidden
         className="pointer-events-none absolute right-2 top-2 flex flex-col gap-1"
@@ -727,7 +583,7 @@ const PlinkoBoard = forwardRef<
               opacity: 1 - i * 0.15,
             }}
           >
-            {c.multiplier}x
+            {formatMultiplier(c.multiplier)}
           </li>
         ))}
       </ul>
@@ -735,7 +591,7 @@ const PlinkoBoard = forwardRef<
       <div className="flex h-6 items-center justify-center font-mono text-[11px] text-[var(--degen-ink-dim,#8ea3bb)]">
         {hInfo ? (
           <span>
-            Slot {hInfo.slot} · P: {(hInfo.prob * 100).toFixed(2)}% · Payout: {hInfo.mult}x
+            Slot {hInfo.slot} · P: {(hInfo.prob * 100).toFixed(2)}% · Payout: {formatMultiplier(hInfo.mult)}
           </span>
         ) : (
           <span className="opacity-40">hover a bin to see odds</span>
