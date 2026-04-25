@@ -32,7 +32,7 @@ const SLOT_H = 34;
 const PEG_R = 5;
 const BALL_R = 9;
 
-export const MAX_PLINKO_BALLS = 10;
+export const MAX_PLINKO_BALLS = 20;
 const MAX_PAYOUT_CARDS = 5;
 
 // ─── Physics ────────────────────────────────────────────────────────────────

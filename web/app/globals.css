@@ -574,6 +574,26 @@ body:has(.pn-degen)::after {
   display: none;
 }
 
+/* Global header adopts the Degen palette on Degen pages. Remapping the
+   ink/line/bg tokens inside the header lets every Tailwind arbitrary
+   class using `var(--ink-1)` etc. pick up the dark theme without editing
+   AppHeader.tsx. */
+body:has(.pn-degen) header {
+  background: #0e1b2a;
+  color: #f5f7fa;
+  border-color: #22374f;
+  --ink-0: #f5f7fa;
+  --ink-1: #c0cee0;
+  --ink-2: #8ea3bb;
+  --line: #22374f;
+  --border-strong: #22374f;
+  --bg-0: #0e1b2a;
+  --bg-1: #14263a;
+  --bg-2: #0a1622;
+  --accent: #ffd23f;
+  --accent-hover: #ffde6b;
+}
+
 .pn-degen {
   --degen-bg: #0e1b2a;
   --degen-bg-soft: #14263a;

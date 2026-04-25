@@ -60,12 +60,21 @@ export default function DegenPage() {
   const droppingRef = useRef(false);
   const pendingDropsRef = useRef<PlinkoDrop[]>([]);
   const ballsInFlightRef = useRef(0);
-  const reservedUnitsRef = useRef(0);
   const balanceUnitsRef = useRef(0);
   const currentBetUnitsRef = useRef<number | null>(null);
   const holdIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const flashSeqRef = useRef(0);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Optimistic balance helpers — debit on drop click, credit on land.
+  function applyBalanceDelta(deltaUnits: number) {
+    balanceUnitsRef.current = Math.max(0, balanceUnitsRef.current + deltaUnits);
+    setBalance((prev) =>
+      prev
+        ? { ...prev, balance_usdc: Math.max(0, prev.balance_usdc + deltaUnits) }
+        : prev,
+    );
+  }
 
   function triggerFlash(multiplier: number) {
     const next: Flash = {
@@ -97,7 +106,7 @@ export default function DegenPage() {
           .select('*')
           .eq('user_id', id)
           .order('created_at', { ascending: false })
-          .limit(20),
+          .limit(6),
       ]);
       if (!active) return;
       const nextBalance = (balanceRow as DegenBalance | null) ?? null;
@@ -135,7 +144,7 @@ export default function DegenPage() {
           if (droppingRef.current) {
             pendingDropsRef.current = [next, ...pendingDropsRef.current];
           } else {
-            setDrops((prev) => [next, ...prev.filter((d) => d.id !== next.id)].slice(0, 20));
+            setDrops((prev) => [next, ...prev.filter((d) => d.id !== next.id)].slice(0, 6));
           }
         },
       )
@@ -145,7 +154,9 @@ export default function DegenPage() {
   }, [userId]);
 
   const balanceUnits = balance?.balance_usdc ?? 0;
-  const availableBalanceUnits = Math.max(0, balanceUnits - reservedUnitsRef.current);
+  // Balance is already optimistic (debited on Drop click, credited on land)
+  // so the "available" balance is simply the current display value.
+  const availableBalanceUnits = balanceUnits;
   const balanceText = unitsToUsdc(balanceUnits);
   const currentBetUnits = useMemo(() => {
     const parsed = parseUsdcToUnits(ballValue);
@@ -166,10 +177,9 @@ export default function DegenPage() {
   // ── Drop handler ───────────────────────────────────────────────────────
   async function handleDrop() {
     const liveBetUnits = currentBetUnitsRef.current;
-    const liveAvailableUnits = Math.max(0, balanceUnitsRef.current - reservedUnitsRef.current);
     if (
       liveBetUnits === null ||
-      liveBetUnits > liveAvailableUnits ||
+      liveBetUnits > balanceUnitsRef.current ||
       ballsInFlightRef.current >= MAX_PLINKO_BALLS
     ) {
       return;
@@ -177,14 +187,14 @@ export default function DegenPage() {
 
     setError(null);
     setMessage(null);
-    reservedUnitsRef.current += liveBetUnits;
+
+    // Debit the bet immediately so the balance reads as "spent" right as the
+    // user clicks. The ball will later credit its payout when it lands.
+    applyBalanceDelta(-liveBetUnits);
+
     ballsInFlightRef.current++;
     droppingRef.current = true;
     setBallsInFlight(ballsInFlightRef.current);
-
-    const releaseReservation = () => {
-      reservedUnitsRef.current = Math.max(0, reservedUnitsRef.current - liveBetUnits);
-    };
 
     try {
       const res = await fetch('/api/plinko/drop', {
@@ -195,20 +205,12 @@ export default function DegenPage() {
       const data = (await res.json()) as DropResult & { error?: string };
       if (!res.ok) throw new Error(data.error ?? 'Drop failed');
 
-      const added = boardRef.current?.addPlaybackBall(
-        data.trajectory,
-        data.pegHits,
-        data.slot,
-        (slot) => {
+      const payoutUnits = Math.round(Number(data.payout) * 1_000_000);
+
+      const creditPayout = (slot: number) => {
         setLastResult({ ...data, slot });
         triggerFlash(data.multiplier);
-        releaseReservation();
-        setBalance((prev) =>
-          prev
-            ? { ...prev, balance_usdc: Math.round(Number(data.balanceAfter) * 1_000_000) }
-            : prev,
-        );
-        balanceUnitsRef.current = Math.round(Number(data.balanceAfter) * 1_000_000);
+        applyBalanceDelta(payoutUnits);
 
         ballsInFlightRef.current = Math.max(0, ballsInFlightRef.current - 1);
         setBallsInFlight(ballsInFlightRef.current);
@@ -222,28 +224,27 @@ export default function DegenPage() {
               const merged = [...queued, ...prev];
               return merged
                 .filter((d, i, a) => a.findIndex((x) => x.id === d.id) === i)
-                .slice(0, 20);
+                .slice(0, 6);
             });
           }
         }
-      });
+      };
+
+      const added = boardRef.current?.addPlaybackBall(
+        data.trajectory,
+        data.pegHits,
+        data.slot,
+        creditPayout,
+      );
 
       if (!added) {
-        releaseReservation();
-        setLastResult(data);
-        triggerFlash(data.multiplier);
-        setBalance((prev) =>
-          prev
-            ? { ...prev, balance_usdc: Math.round(Number(data.balanceAfter) * 1_000_000) }
-            : prev,
-        );
-        balanceUnitsRef.current = Math.round(Number(data.balanceAfter) * 1_000_000);
-        ballsInFlightRef.current = Math.max(0, ballsInFlightRef.current - 1);
-        setBallsInFlight(ballsInFlightRef.current);
-        if (ballsInFlightRef.current === 0) droppingRef.current = false;
+        // Board was at capacity — credit payout immediately since no ball
+        // will animate for this drop.
+        creditPayout(data.slot);
       }
     } catch (err) {
-      releaseReservation();
+      // Refund the optimistic debit.
+      applyBalanceDelta(liveBetUnits);
       setError(err instanceof Error ? err.message : 'Drop failed');
       ballsInFlightRef.current = Math.max(0, ballsInFlightRef.current - 1);
       setBallsInFlight(ballsInFlightRef.current);
@@ -256,8 +257,7 @@ export default function DegenPage() {
     void handleDrop();
     holdIntervalRef.current = setInterval(() => {
       const liveBetUnits = currentBetUnitsRef.current;
-      const liveAvailableUnits = Math.max(0, balanceUnitsRef.current - reservedUnitsRef.current);
-      if (liveBetUnits === null || liveAvailableUnits < liveBetUnits) {
+      if (liveBetUnits === null || balanceUnitsRef.current < liveBetUnits) {
         stopHolding();
         return;
       }
@@ -295,7 +295,6 @@ export default function DegenPage() {
       if (!res.ok) throw new Error(data.error ?? 'Cashout failed');
       setMessage(data.txHash ? `Withdrawn. Tx ${data.txHash}` : 'Withdrawn. Check your wallet.');
       balanceUnitsRef.current = 0;
-      reservedUnitsRef.current = 0;
       setBalance((prev) => (prev ? { ...prev, balance_usdc: 0 } : null));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Cashout failed');
