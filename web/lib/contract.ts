@@ -7,8 +7,12 @@ export const abi = procrastinotAbi as unknown as Abi;
 export const USDC_ADDRESS = (process.env.NEXT_PUBLIC_USDC_ADDRESS ??
   '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238') as `0x${string}`;
 
+// Fall back to the canonical Sepolia deployment from the README so the
+// app stays functional if NEXT_PUBLIC_CONTRACT_ADDRESS is unset on the
+// host. Other env-derived addresses (USDC, chain id) already follow the
+// same fallback pattern below; this keeps them consistent.
 export const CONTRACT_ADDRESS = (process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ??
-  '') as `0x${string}` | '';
+  '0x8a33F94c65eb0F8EF864EfA79cF746DFde3ab371') as `0x${string}`;
 
 export const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? 11155111);
 
