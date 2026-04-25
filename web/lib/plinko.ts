@@ -1,12 +1,13 @@
-// EV ≈ 0.70 per unit wagered (30% house edge).
+// EV ≈ 0.70 per unit wagered (30% house edge). Jackpots capped at 50x
+// so outcomes feel lively without an outlier payout dominating the EV.
 // Verified with binomial weights: Σ C(n,k)/2^n × multiplier(k) ≈ 0.70
 export const MULTIPLIERS = {
   // 9 slots. EV = 180.2/256 = 0.704
   8: [9.0, 2.0, 0.9, 0.4, 0.5, 0.4, 0.9, 2.0, 9.0],
-  // 13 slots. EV = 2908.7/4096 = 0.710
-  12: [150, 8, 2, 1.0, 0.65, 0.5, 0.3, 0.5, 0.65, 1.0, 2, 8, 150],
-  // 17 slots. EV = 45738.8/65536 = 0.698
-  16: [200, 20, 7, 3.5, 1.8, 1.1, 0.7, 0.4, 0.2, 0.4, 0.7, 1.1, 1.8, 3.5, 7, 20, 200],
+  // 13 slots. EV = 2872.2/4096 = 0.701
+  12: [50, 10, 2.5, 1.0, 0.7, 0.5, 0.3, 0.5, 0.7, 1.0, 2.5, 10, 50],
+  // 17 slots. EV = 46082.3/65536 = 0.703
+  16: [50, 20, 7, 3.5, 1.8, 1.1, 0.7, 0.4, 0.25, 0.4, 0.7, 1.1, 1.8, 3.5, 7, 20, 50],
 } as const;
 
 export type PlinkoRows = keyof typeof MULTIPLIERS;
